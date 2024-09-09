@@ -1,1 +1,1 @@
-# GNAR-Python
+# GNAR Python
