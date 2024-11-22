@@ -1,3 +1,5 @@
+import numpy as np
+
 def neighbour_set_tensor(A, s):
     """
     Compute a tensor containing the powers of the adjacency matrix A up to stage s.

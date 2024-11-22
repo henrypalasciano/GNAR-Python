@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 def coefficient_dataframe(ts, p, s_vec, intercept):
@@ -5,16 +6,20 @@ def coefficient_dataframe(ts, p, s_vec, intercept):
     Create a dataframe to store the coefficients of the GNAR model.
 
     Parameters:
-        ts (pd.DataFrame): The input time series data. Shape (m, n) where m is the number of observations and n is the number of nodes.
+        ts (np.ndarray or pd.DataFrame): The input time series data. Shape (m, n) where m is the number of observations and n is the number of nodes.
         p (int): The number of lags.
-        s_vec (ndarray): An array containing the maximum stage of neighbour dependence for each lag.
+        s_vec (np.ndarray): An array containing the maximum stage of neighbour dependence for each lag.
         intercept (bool): Whether to include an intercept in the model.
 
     Returns:
         pd.DataFrame. Dataframe to store the coefficients of the GNAR model.
     """
     # Index of the dataframe
-    index = ts.columns
+    if isinstance(ts, np.ndarray):
+        index = np.arange(ts.shape[1])
+    else:
+        index = ts.columns
+        
     # Columns of the dataframe
     if intercept:
         columns = ["a_0"]
