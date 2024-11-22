@@ -7,7 +7,7 @@ from neighbour_sets import neighbour_set_tensor
 from formatting import coefficient_dataframe
 
 class GNAR:
-    def __init__(self, ts, A, p, s_vec, intercept=True, model_type="standard"):
+    def __init__(self, ts, A, p, s_vec, remove_mean=True, model_type="standard"):
         """
         Initialize the GNAR model.
 
@@ -17,17 +17,23 @@ class GNAR:
             p (int): The order of the GNAR model.
             s_vec (np.ndarray): The maximum stage of neighbour dependence for each lag. Shape (p,)
         """
-        self.ts = ts
-        self.is_array = isinstance(ts, np.ndarray)
+        if isinstance(ts, np.ndarray):
+            self.ts = ts.copy()
+        else:
+            self.ts = ts.to_numpy().copy()
         self.A = A
         # Compute the tensor of matrices conrresponding to the neighbour sets of each node
         self.A_tensor = neighbour_set_tensor(A, max(s_vec))
         self.p = p
         self.s_vec = s_vec
-        self.intercept = intercept
+        if remove_mean:
+            self.mu = np.mean(self.ts, axis=0, keepdims=True)
+            self.ts -= self.mu
+        else:
+            self.mu = np.zeros((1, self.ts.shape[1]))
         self.model_type = model_type
         # Model coefficients are stored in a dataframe, where the index are the nodes and the columns are the coefficients
-        self.coefficients = coefficient_dataframe(ts, p, s_vec, intercept)
+        self.coefficients = coefficient_dataframe(ts, p, s_vec)
         self.fit()
 
     def fit(self):
@@ -38,18 +44,14 @@ class GNAR:
             p (int): The number of lags.
             s (np.ndarray): An array containing the maximum stage of neighbour dependence for each lag.
         """
-        if self.is_array:
-            ts = self.ts
-        else:
-            ts = self.ts.to_numpy()
-        m, n = np.shape(ts)
+        m, n = np.shape(self.ts)
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (m, n, max(s) + 1)
         data = np.zeros([m, n, 1 + max(self.s_vec)])
-        data[:, :, 0] = ts
-        data[:, :, 1:] = np.transpose(ts @ self.A_tensor, (1, 2, 0))
+        data[:, :, 0] = self.ts
+        data[:, :, 1:] = np.transpose(self.ts @ self.A_tensor, (1, 2, 0))
         X,y = format_X_y(data, self.p, self.s_vec)
         # Fit the model for each node using least squares regression
-        self.coefficients.iloc[:, :] = gnar_lr(X, y, self.p, self.s_vec, self.intercept, self.model_type)
+        self.coefficients.iloc[:, :] = gnar_lr(X, y, self.p, self.s_vec, self.model_type)
 
     def predict(self, ts, n_steps=1):
         """
@@ -76,12 +78,13 @@ class GNAR:
             predictions_df = pd.DataFrame(index=ts.index[self.p - 1:], columns=columns, dtype=float)
             ts = ts.to_numpy()
         
+        ts -= self.mu
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (m, n, max(s) + 1)
         data = np.zeros([m, n, 1 + r])
         data[:, :, 0] = ts
         data[:, :, 1:] = np.transpose(ts @ self.A_tensor, (1, 2, 0))
         # Format the data to make predictions. The laggad values array contains lags for the time series and neighbour sums up to the maximum neighbour stage of dependence. This is an array of shape (m - p + 1, n, p * (1 + max(s))), which is required for updating X.
-        X, lagged_vals = format_X(data, self.p, self.s_vec, self.intercept)
+        X, lagged_vals = format_X(data, self.p, self.s_vec)
         coefficients = self.coefficients.to_numpy()
         
         # Initialise the array to store the predictions, which is an array of shape (m - p + 1, n, n_steps)
@@ -89,17 +92,17 @@ class GNAR:
         # Compute the one-step ahead predictions
         predictions[:, :, 0] = np.sum(X * coefficients, axis=2)
         if is_df:
-            predictions_df.loc[:, (ts_names, 1)] = predictions[:, :, 0]
+            predictions_df.loc[:, (ts_names, 1)] = predictions[:, :, 0] + self.mu
         for i in range(1, n_steps):
             # Update the lagged values and design matrix using the predicted values
             lagged_vals = np.dstack([np.transpose(predictions[:, :, i-1] @ self.A_tensor, (1, 2, 0)), lagged_vals[:, :, :-r]])
             # Update the design matrix
-            X = update_X(X, predictions[:, :, i-1], lagged_vals, self.p, self.s_vec, self.intercept)
+            X = update_X(X, predictions[:, :, i-1], lagged_vals, self.p, self.s_vec)
             # Compute the (i + 1) - step ahead predictions
             predictions[:, :, i] = np.sum(X * coefficients, axis=2)
             if is_df:
-                predictions_df.loc[:, (ts_names, i + 1)] = predictions[:, :, i]
+                predictions_df.loc[:, (ts_names, i + 1)] = predictions[:, :, i] + self.mu
         
         if is_df:
             return predictions_df
-        return predictions
+        return predictions + self.mu.reshape(1, n, 1)

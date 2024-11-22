@@ -10,7 +10,7 @@ def format_X_y(data, p, s_vec):
         s_vec: np.array. Maximum stage of neighbour dependence for each lag. Shape (p,)
 
     Returns:
-        X: np.array. Design matrix. Shape (m - p, n, p + sum(s)). The lagged node values are the first p columns, followed by the neighbour sums for each lag. If an intercept is included, it is the first column.
+        X: np.array. Design matrix. Shape (m - p, n, p + sum(s)). The lagged node values are the first p columns, followed by the neighbour sums for each lag.
         y: np.array. Target matrix. Shape (m - p, n)
     """
     m, n, _ = np.shape(data)
@@ -25,7 +25,7 @@ def format_X_y(data, p, s_vec):
     # Return the design and target matrices
     return X, y
 
-def gnar_lr(X, y, p, s_vec, intercept, model_type):
+def gnar_lr(X, y, p, s_vec, model_type):
     """
     Fit a GNAR model using multiple linear regression
 
@@ -34,59 +34,47 @@ def gnar_lr(X, y, p, s_vec, intercept, model_type):
         y: np.array. Target matrix. Shape (m, n)
         p: int. Number of lags
         s_vec: np.array. Maximum stage of neighbour dependence for each lag. Shape (p,)
-        intercept: bool. Whether to include an intercept in the model
         model_type: str. Type of GNAR model to fit. One of "global", "standard" or "local"
 
     Returns:
-        coeffs_mat: np.array. Coefficients matrix. Shape (n, p + sum(s) + int(intercept))
+        coeffs_mat: np.array. Coefficients matrix. Shape (n, p + sum(s))
     """
     if model_type == "global":
-        return global_gnar_lr(X, y, intercept)
+        return global_gnar_lr(X, y)
     elif model_type == "standard":
-        return standard_gnar_lr(X, y, p, s_vec, intercept)
+        return standard_gnar_lr(X, y, p, s_vec)
     elif model_type == "local":
-        return local_gnar_lr(X, y, intercept)
+        return local_gnar_lr(X, y)
     else:
         raise ValueError("Invalid model type")
 
-def global_gnar_lr(X, y, intercept):
+def global_gnar_lr(X, y):
     """
     Fit a global-alpha GNAR model using multiple linear regression. In the global-alpha GNAR model, the coefficients are the same for all nodes.
 
     Parameters:
         X (ndarray): The design matrix. Shape (m, n, k), where m in the number of observation, n is the number of nodes and k is the number of features.
         y (ndarray): The target matrix. Shape (m, n)
-        intercept (bool): Whether to include an intercept in the model.
 
     Returns:
-        coeffs_mat (ndarray): The coefficients matrix. Shape (n, k + int(intercept))
+        coeffs_mat (ndarray): The coefficients matrix. Shape (n, k)
     """
     # Shape of the data
     m, n, k = np.shape(X)
     # Stack the design matrix and target
     design_matrix = np.transpose(X, (1, 0, 2)).reshape(n * m, k)
     target = y.T.reshape(-1,1)
-    # Add intercept columns if required
-    if intercept:
-        intercept_matrix = np.zeros([m * n, n])
-        for i in range(n):
-            intercept_matrix[i * m : (i + 1) * m, i] = 1
-        design_matrix = np.hstack([intercept_matrix, design_matrix])
     # Compute the coefficients using least squares regression
-    coeffs = np.zeros(k + n * int(intercept))
+    coeffs = np.zeros(n + k)
     valid_cols = np.sum(np.abs(design_matrix), axis=0) > 0
     coeffs[valid_cols] = np.linalg.lstsq(design_matrix[:, valid_cols], target, rcond=None)[0].flatten()
     # Remap the coefficients to the original shape
-    if intercept:
-        coeffs_mat = coeffs[0 : n].reshape(n, 1)
-        coeffs_mat = np.hstack([coeffs_mat, np.repeat(coeffs[n:].reshape(1, k), n, axis=0)])
-    else:
-        coeffs_mat = np.repeat(coeffs.reshape(1, k), n, axis=0)
+    coeffs_mat = np.repeat(coeffs.reshape(1, k), n, axis=0)
     # Return the coefficients matrix
     return coeffs_mat
 
 
-def standard_gnar_lr(X, y, p, s_vec, intercept):
+def standard_gnar_lr(X, y, p, s_vec):
     """
     Fit a standard GNAR model using multiple linear regression. In the standard GNAR model, the alpha coefficients are different for each node, while the beta coeffients are the same.
 
@@ -95,10 +83,9 @@ def standard_gnar_lr(X, y, p, s_vec, intercept):
         y (ndarray): The target matrix. Shape (m, n)
         p (int): The number of lags.
         s_vec (ndarray): An array containing the maximum stage of neighbour dependence for each lag.
-        intercept (bool): Whether to include an intercept in the model.
 
     Returns:
-        coeffs_mat (ndarray): The coefficients matrix. Shape (n, k + int(intercept))
+        coeffs_mat (ndarray): The coefficients matrix. Shape (n, k)
     """
     # Shape of the data
     m, n, k = np.shape(X)
@@ -110,24 +97,18 @@ def standard_gnar_lr(X, y, p, s_vec, intercept):
         design_matrix[i * m : (i + 1) * m, i :: n] = X[:, i, :p]
     # Add the beta coeffient features to the design matrix
     design_matrix = np.hstack([design_matrix, np.transpose(X[:, :, p:], (1, 0, 2)).reshape(n * m, np.sum(s_vec))])
-    # Add intercept columns if required
-    if intercept:
-        intercept_matrix = np.zeros([m * n, n])
-        for i in range(n):
-            intercept_matrix[i * m : (i + 1) * m, i] = 1
-        design_matrix = np.hstack([intercept_matrix, design_matrix])
     # Compute the coefficients using least squares regression
-    coeffs = np.zeros(int(intercept) * n + p * n + np.sum(s_vec))
+    coeffs = np.zeros(p * n + np.sum(s_vec))
     valid_cols = np.sum(np.abs(design_matrix), axis=0) > 0
     coeffs[valid_cols] = np.linalg.lstsq(design_matrix[:, valid_cols], target, rcond=None)[0].flatten()
     # Remap the coefficients to the original shape
-    coeffs_mat = coeffs[0 : n * (p + int(intercept))].reshape(p + int(intercept), n).T
-    coeffs_mat = np.hstack([coeffs_mat, np.repeat(coeffs[n * (p + int(intercept)):].reshape(1, -1), n, axis=0)])
+    coeffs_mat = coeffs[0 : n * p].reshape(p, n).T
+    coeffs_mat = np.hstack([coeffs_mat, np.repeat(coeffs[n * p :].reshape(1, -1), n, axis=0)])
     # Return the coefficients matrix
     return coeffs_mat
 
 
-def local_gnar_lr(X, y, intercept):
+def local_gnar_lr(X, y):
     """
     Fit a local-beta GNAR model using multiple linear regression. In the local-beta GNAR model, the alphaand beta coefficients are different for each node.
 
@@ -136,19 +117,12 @@ def local_gnar_lr(X, y, intercept):
         y (ndarray): The target matrix. Shape (m, n)
         p (int): The number of lags.
         s_vec (ndarray): An array containing the maximum stage of neighbour dependence for each lag.
-        intercept (bool): Whether to include an intercept in the model.
 
     Returns:
-        coeffs_mat (ndarray): The coefficients matrix. Shape (n, k + int(intercept))
+        coeffs_mat (ndarray): The coefficients matrix. Shape (n, k)
     """
     # Shape of the data
     m, n, k = np.shape(X)
-    # Add intercept column if required
-    if intercept:
-        X = np.dstack([np.ones([m, n, 1]), X])
-        coeff_mat = np.zeros([n, k + 1])
-    else:
-        coeff_mat = np.zeros([n, k])
     # Compute the coefficients for each node using least squares regression
     for i in range(n):
         X_i = X[:, i, :]
@@ -158,7 +132,7 @@ def local_gnar_lr(X, y, intercept):
     return coeff_mat
 
 
-def constrained_multiple_lr(X, y, constraints, intercept):
+def constrained_multiple_lr(X, y, constraints):
     """
     Fit a multiple linear regression model with the constraint that a set of coefficients are equal among all fits.
 
@@ -166,10 +140,9 @@ def constrained_multiple_lr(X, y, constraints, intercept):
         X (ndarray): The design matrix. Shape (m, n, k), where m in the number of observation, n is the number of nodes and k is the number of features.
         y (ndarray): The target matrix. Shape (m, n)
         constraints (ndarray): The coefficients which are not allowed to vary among nodes, with 1s denoting the ones that are fixed and 0s the ones that are allowed to vary. Shape (k,)
-        intercept (bool): Whether to include an intercept in the model. This is always allowed to vary among nodes.
 
     Returns:
-        coeffs_mat (ndarray): The coefficients matrix. Shape (n, k + int(intercept))
+        coeffs_mat (ndarray): The coefficients matrix. Shape (n, k)
     """
     # Shape of the data
     m, n, k = np.shape(X)
@@ -193,32 +166,23 @@ def constrained_multiple_lr(X, y, constraints, intercept):
             for j in range(n):
                 design_matrix[j * m : (j + 1) * m, counter] = X[:, j, i]
                 counter += 1
-    # Add an intercept columns if required (this is never constrained)
-    if intercept:
-        intercept_matrix = np.zeros([m * n, n])
-        for i in range(n):
-            intercept_matrix[i * m : (i + 1) * m, i] = 1
-        design_matrix = np.hstack([intercept_matrix, design_matrix])
-        design_k += n
+                
     # Only compute coefficients for columns that have at least one non-zero value
     valid_cols = np.sum(np.abs(design_matrix), axis=0) > 0
     coeffs = np.zeros(design_k)
     # Compute the coefficients using least squares regression
     coeffs[valid_cols] = np.linalg.lstsq(design_matrix[:, valid_cols], target, rcond=None)[0].flatten()
     # Remap the coefficients to the original shape
-    coeffs_mat = np.zeros([n, k + int(intercept)])
+    coeffs_mat = np.zeros([n, k])
     counter = 0
-    if intercept:
-        coeffs_mat[:, 0] = coeffs[0 : n]
-        counter += n
     for i in range(k):
         # If the coefficient is constrained, then it only needs to be added once as a single column
         if constraints[i] == 1:
-            coeffs_mat[:, i + int(intercept)] = coeffs[counter]
+            coeffs_mat[:, i] = coeffs[counter]
             counter += 1
         # If the coefficient is free, then it needs to be added n times in the corresponding location
         else:
-            coeffs_mat[:, i + int(intercept)] = coeffs[counter : counter + n]
+            coeffs_mat[:, i] = coeffs[counter : counter + n]
             counter += n
     # Return the coefficients matrix
     return coeffs_mat    
