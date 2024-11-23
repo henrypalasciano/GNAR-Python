@@ -33,12 +33,14 @@ def update_X(X, preds, lagged_vals, p, s_vec):
     Update the design matrix with new lagged values and neighbour sums
 
     Params:
+        X: np.array. Design matrix. Shape (m, n, p + sum(s))
+        preds: np.array. Predicted values. Shape (m, n)
         lagged_vals: np.array. Lagged values and neighbour sums. Shape (m, n, p * (1 + max(s_vec)))
         p: int. Number of lags
         s_vec: np.array. Maximum stage of neighbour dependence for each lag. Shape (p,)
 
     Returns:
-        new_X: np.array. Design matrix. Shape (m - p + 1, n, p + sum(s))
+        new_X: np.array. Design matrix. Shape (m, n, p + sum(s))
     """
     # Data shapes
     m, n, _ = np.shape(X)

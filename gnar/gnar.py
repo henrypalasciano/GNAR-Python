@@ -4,11 +4,12 @@ import networkx as nx
 
 from model_fitting import format_X_y, gnar_lr
 from forecasting import format_X, update_X
+from simulating import shift_X
 from neighbour_sets import neighbour_set_tensor
 from formatting import parameter_dataframe
 
 class GNAR:
-    def __init__(self, A, p, s_vec, ts=None, remove_mean=True, parameters=None, model_type="standard"):
+    def __init__(self, A, p, s_vec, ts=None, remove_mean=True, parameters=None, sigma_2=None, model_type="standard"):
         """
         Initialize the GNAR model.
 
@@ -24,10 +25,10 @@ class GNAR:
         self._p = p
         self._s_vec = s_vec
         self._model_type = model_type
-        self._model_setup(ts, remove_mean, parameters)
-        self.nx_graph = None
+        self._model_setup(ts, remove_mean, parameters, sigma_2)
+        self._to_networkx()
 
-    def _model_setup(self, ts=None, remove_mean=True, parameters=None):
+    def _model_setup(self, ts=None, remove_mean=True, parameters=None, sigma_2=None):
         """
         Setup the GNAR model.
 
@@ -46,6 +47,15 @@ class GNAR:
                 self._parameters = parameters
             else:
                 self._parameters = parameter_dataframe(self._p, self._s_vec, parameters=parameters)
+            if sigma_2 is not None:
+                if isinstance(sigma_2, (float, int)):
+                    self._sigma_2 = np.full((1, parameters.shape[1]), sigma_2, dtype=float)
+                elif isinstance(sigma_2, pd.DataFrame):
+                    self._sigma_2 = sigma_2
+                else:
+                    self._sigma_2 = sigma_2.to_numpy().reshape(1, -1)
+            else:
+                self._sigma_2 = np.ones((1, parameters.shape[1]))
         else:
             raise ValueError("Either the input time series data or the coefficients must be provided.")
 
@@ -72,7 +82,9 @@ class GNAR:
         data[:, :, 1:] = np.transpose(ts @ self._A_tensor, (1, 2, 0))
         X,y = format_X_y(data, self._p, self._s_vec)
         # Fit the model for each node using least squares regression and save the coefficients to a DataFrame
-        self._parameters.iloc[1:, :] = gnar_lr(X, y, self._p, self._s_vec, self._model_type).T
+        coefficients =  gnar_lr(X, y, self._p, self._s_vec, self._model_type)
+        self._sigma_2 = np.sum((np.sum(X * coefficients, axis=2) - y) ** 2, axis=0) / (m - self._p)
+        self._parameters.iloc[1:, :] = coefficients.T
 
     def predict(self, ts, n_steps=1):
         """
@@ -109,7 +121,7 @@ class GNAR:
         data[:, :, 1:] = np.transpose(ts @ self._A_tensor, (1, 2, 0))
         # Format the data to make predictions. The laggad values array contains lags for the time series and neighbour sums up to the maximum neighbour stage of dependence. This is an array of shape (m - p + 1, n, p * (1 + max(s))), which is required for updating X.
         X, lagged_vals = format_X(data, self._p, self._s_vec)
-        
+
         # Initialise the array to store the predictions, which is an array of shape (m - p + 1, n, n_steps)
         predictions = np.zeros([m - self._p + 1, n, n_steps])
         # Compute the one-step ahead predictions
@@ -130,7 +142,47 @@ class GNAR:
             return predictions_df
         return predictions + mu.reshape(1, n, 1)
 
-    def to_networkx(self):
+    def simulate(self, m, sigma_2=None, burn_in=50):
+        """
+        Simulate data from the GNAR model.
+
+        Parameters:
+            m (int): The number of time steps to simulate.
+            sigma_2 (float or np.ndarray): The variance of the noise. If a float, the same variance is used for all nodes. If an array, the variances are used for each node.
+            burn_in (int): The number of burn-in steps to discard.
+        
+        Returns:
+            ts_sim (np.ndarray): The simulated time series data. Shape (m, n)
+        """
+        if sigma_2 is None:
+            sigma_2 = self._sigma_2
+        # Number of nodes and coefficients
+        n = self._parameters.shape[1]
+        r = np.max(self._s_vec)
+        coefficients = self._parameters.iloc[1:, :].to_numpy().T
+        
+        # Initialise the array to store the simulated time series data
+        ts_sim = np.zeros([burn_in + m, n])
+        ns = np.zeros([n, self._p * r])
+        # Initialise the design matrix, which is an array of shape (n, p + sum(s))
+        X = np.zeros([n, self._p + np.sum(self._s_vec)])
+        for t in range(self._p, burn_in + m):
+            # Generate the noise and the simulated time series at time t
+            e_t = np.random.normal(loc=0, scale=np.sqrt(sigma_2), size=n)
+            sim = np.sum(X * coefficients, axis=1) + e_t
+            ts_sim[t] = sim
+            # Update neighbour sums array
+            if self._p == 1:
+                ns = (sim @ self._A_tensor).T
+            else:
+                ns = np.hstack([(sim @ self._A_tensor).T, ns[:, :-r]])
+            # Shift the design matrix with the new simulated values and neighbour sums
+            X = shift_X(X, sim, ns, self._p, self._s_vec)
+
+        # Return the simulated time series data
+        return ts_sim[burn_in:]
+
+    def _to_networkx(self):
         """
         Convert the adjacency matrix to a NetworkX graph, which is stored in the nx_graph attribute.
         """
@@ -141,11 +193,10 @@ class GNAR:
         """
         Draw the graph using NetworkX.
         """
-        if self.nx_graph is None:
-            self.to_networkx()
         nx.draw(self.nx_graph, with_labels=True)
 
     def __str__(self):
         model_info = f"{self._model_type.capitalize()} GNAR({self._p}, {self._s_vec}) Model\n"
+        graph_info = f"{self.nx_graph}\n"
         parameter_info = f"Parameters:\n{self._parameters}\n"
-        return model_info + parameter_info
+        return model_info + graph_info + parameter_info
