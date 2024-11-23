@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
+import networkx as nx
 
 from model_fitting import format_X_y, gnar_lr
 from forecasting import format_X, update_X
 from neighbour_sets import neighbour_set_tensor
-from formatting import coefficient_dataframe
+from formatting import parameter_dataframe
 
 class GNAR:
-    def __init__(self, A, p, s_vec, ts=None, remove_mean=True, coefficients=None, mu=None, model_type="standard"):
+    def __init__(self, A, p, s_vec, ts=None, remove_mean=True, parameters=None, model_type="standard"):
         """
         Initialize the GNAR model.
 
@@ -23,36 +24,28 @@ class GNAR:
         self._p = p
         self._s_vec = s_vec
         self._model_type = model_type
-        self._model_setup(ts, remove_mean, coefficients, mu)
+        self._model_setup(ts, remove_mean, parameters)
+        self.nx_graph = None
 
-    def _model_setup(self, ts=None, remove_mean=True, coefficients=None, mu=None):
+    def _model_setup(self, ts=None, remove_mean=True, parameters=None):
         """
         Setup the GNAR model.
 
         Parameters:
             ts (np.ndarray or pd.DataFrame): The input time series data. Shape (m, n) where m is the number of observations and n is the number of nodes.
-            coefficients (np.ndarray): The coefficients of the GNAR model. Shape (n, p + sum(s_vec)).
-            mu (np.ndarray): The mean of the input time series data. Shape (1, n).
+            parameters (np.ndarray): The parameters of the GNAR model. Shape (n, p + sum(s_vec)).
         """
         if ts is not None:
-            self._coefficients = coefficient_dataframe(self._p, self._s_vec, ts=ts)
-            self._mu = pd.DataFrame(columns=self._coefficients.columns, index=["mean"], dtype=float)
+            self._parameters = parameter_dataframe(self._p, self._s_vec, ts=ts)
             if isinstance(ts, np.ndarray):
                 self.fit(ts, remove_mean)
             else:
                 self.fit(ts.to_numpy(), remove_mean)
-        elif coefficients is not None:
-            if isinstance(coefficients, pd.DataFrame):
-                self._coefficients = coefficients
+        elif parameters is not None:
+            if isinstance(parameters, pd.DataFrame):
+                self._parameters = parameters
             else:
-                self._coefficients = coefficient_dataframe(self._p, self._s_vec, coefficients=coefficients)
-            if mu is not None:
-                if isinstance(mu, np.ndarray):
-                    self._mu = pd.DataFrame(mu.reshape(1, coefficients.shape[1]), columns=self._coefficients.columns, index=["mean"], dtype=float)
-                else:
-                    self._mu = mu
-            else:
-                self._mu = pd.DataFrame(np.zeros((1, coefficients.shape[1])), columns=self._coefficients.columns, index=["mean"], dtype=float)
+                self._parameters = parameter_dataframe(self._p, self._s_vec, parameters=parameters)
         else:
             raise ValueError("Either the input time series data or the coefficients must be provided.")
 
@@ -71,7 +64,7 @@ class GNAR:
         else:
             mu = np.zeros((1, n))
         ts = ts - mu
-        self._mu.iloc[:, :] = mu
+        self._parameters.loc["mean", :] = mu
 
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (m, n, max(s) + 1)
         data = np.zeros([m, n, 1 + max(self._s_vec)])
@@ -79,7 +72,7 @@ class GNAR:
         data[:, :, 1:] = np.transpose(ts @ self._A_tensor, (1, 2, 0))
         X,y = format_X_y(data, self._p, self._s_vec)
         # Fit the model for each node using least squares regression and save the coefficients to a DataFrame
-        self._coefficients.iloc[:, :] = gnar_lr(X, y, self._p, self._s_vec, self._model_type).T
+        self._parameters.iloc[1:, :] = gnar_lr(X, y, self._p, self._s_vec, self._model_type).T
 
     def predict(self, ts, n_steps=1):
         """
@@ -94,7 +87,7 @@ class GNAR:
         """
         # Data shapes
         m, n = ts.shape
-        if n != self._coefficients.shape[1]:
+        if n != self._parameters.shape[1]:
             raise ValueError("The number of nodes in the input time series does not match the number of nodes in the model.")
         r = np.max(self._s_vec)
 
@@ -106,8 +99,8 @@ class GNAR:
             predictions_df = pd.DataFrame(index=ts.index[self._p - 1:], columns=columns, dtype=float)
             ts = ts.to_numpy()
         
-        mu = self._mu.to_numpy()
-        coefficients = self._coefficients.to_numpy().T
+        mu = self._parameters.to_numpy()[0]
+        coefficients = self._parameters.to_numpy()[1:].T
         
         ts -= mu
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (m, n, max(s) + 1)
@@ -137,7 +130,22 @@ class GNAR:
             return predictions_df
         return predictions + mu.reshape(1, n, 1)
 
+    def to_networkx(self):
+        """
+        Convert the adjacency matrix to a NetworkX graph, which is stored in the nx_graph attribute.
+        """
+        self.nx_graph = nx.from_numpy_array(self._A)
+        self.nx_graph = nx.relabel_nodes(self.nx_graph, dict(enumerate(self._parameters.columns)))
+
+    def draw(self):
+        """
+        Draw the graph using NetworkX.
+        """
+        if self.nx_graph is None:
+            self.to_networkx()
+        nx.draw(self.nx_graph, with_labels=True)
+
     def __str__(self):
         model_info = f"{self._model_type.capitalize()} GNAR({self._p}, {self._s_vec}) Model\n"
-        parameter_info = f"Parameters:\n{pd.concat([self._mu, self._coefficients], axis=0)}\n"
+        parameter_info = f"Parameters:\n{self._parameters}\n"
         return model_info + parameter_info
