@@ -24,6 +24,8 @@ class GNAR:
         self._A_tensor = neighbour_set_tensor(A, max(s_vec))
         self._p = p
         self._s_vec = s_vec
+        self._m = None
+        self._n = A.shape[0]
         self._model_type = model_type
         self._model_setup(ts, remove_mean, parameters, sigma_2)
         self._to_networkx()
@@ -64,24 +66,24 @@ class GNAR:
             p (int): The number of lags.
             s (np.ndarray): An array containing the maximum stage of neighbour dependence for each lag.
         """
-        m, n = np.shape(ts)
+        self._m, self._n = np.shape(ts)
         # Compute the mean if necessary and save this to a DataFrame
         if remove_mean:
             mu = np.mean(ts, axis=0, keepdims=True)
         else:
-            mu = np.zeros((1, n))
+            mu = np.zeros((1, self._n))
         ts = ts - mu
         self._parameters.loc["mean", :] = mu
 
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (m, n, max(s) + 1)
-        data = np.zeros([m, n, 1 + max(self._s_vec)])
+        data = np.zeros([self._m, self._n, 1 + max(self._s_vec)])
         data[:, :, 0] = ts
         data[:, :, 1:] = np.transpose(ts @ self._A_tensor, (1, 2, 0))
         X,y = format_X_y(data, self._p, self._s_vec)
         # Fit the model for each node using least squares regression and save the coefficients to a DataFrame
         coefficients =  gnar_lr(X, y, self._p, self._s_vec, self._model_type)
         res = np.sum(X * coefficients, axis=2) - y
-        self._sigma_2 = res.T @ res / (m - self._p)
+        self._sigma_2 = res.T @ res / (self._m - self._p)
         self._parameters.iloc[1:, :] = coefficients.T
 
     def predict(self, ts, n_steps=1):
@@ -97,7 +99,7 @@ class GNAR:
         """
         # Data shapes
         m, n = ts.shape
-        if n != self._parameters.shape[1]:
+        if n != self._n:
             raise ValueError("The number of nodes in the input time series does not match the number of nodes in the model.")
         r = np.max(self._s_vec)
 
@@ -153,7 +155,7 @@ class GNAR:
             ts_sim (np.ndarray): The simulated time series data. Shape (m, n)
         """
         # Number of nodes and coefficients
-        n = self._parameters.shape[1]
+        n = self._n
         r = np.max(self._s_vec)
         coefficients = self._parameters.iloc[1:, :].to_numpy().T
 
@@ -162,9 +164,7 @@ class GNAR:
             sigma_2 = self._sigma_2
         if isinstance(sigma_2, (float, int)):
             e_t = np.random.normal(loc=0, scale=np.sqrt(sigma_2), size=(burn_in + m, n))
-        elif sigma_2.ndim == 1:
-            e_t = np.random.normal(loc=0, scale=np.sqrt(sigma_2), size=(burn_in + m, n))
-        elif sigma_2.shape[0] == 1:
+        elif sigma_2.ndim == 1 or sigma_2.shape[0] == 1:
             e_t = np.random.normal(loc=0, scale=np.sqrt(sigma_2), size=(burn_in + m, n))
         else:
             e_t = np.random.multivariate_normal(mean=np.zeros(n), cov=sigma_2, size=burn_in + m)
@@ -189,6 +189,52 @@ class GNAR:
         # Return the simulated time series data
         return ts_sim[burn_in:]
 
+    def bic(self):
+        """
+        Compute the Bayesian Information Criterion (BIC) for the GNAR model.
+
+        Returns:
+            bic (float): The Bayesian Information Criterion (BIC) for the GNAR model.
+        """
+        if self._m is None:
+            raise ValueError("The model has not been fitted.")
+        if isinstance(self._sigma_2, (float, int)):
+            det = n * np.log(self._sigma_2)
+        elif self._sigma_2.ndim == 1 or self._sigma_2.shape[0] == 1:
+            det = np.sum(np.log(self._sigma_2))
+        else:
+            det = np.log(np.linalg.det(self._sigma_2))
+        if self._model_type == "global":
+            k = self._p + np.sum(self._s_vec)
+        elif self._model_type == "standard":
+            k = self._n * self._p + np.sum(self._s_vec)
+        else:
+            k = self._n * (self._p + np.sum(self._s_vec))
+        return det + k * np.log(self._m - self._p) / (self._m - self._p)
+
+    def aic(self):
+        """
+        Compute the Akaike Information Criterion (AIC) for the GNAR model.
+
+        Returns:
+            aic (float): The Akaike Information Criterion (AIC) for the GNAR model.
+        """
+        if self._m is None:
+            raise ValueError("The model has not been fitted.")
+        if isinstance(self._sigma_2, (float, int)):
+            det = n * np.log(self._sigma_2)
+        elif self._sigma_2.ndim == 1 or self._sigma_2.shape[0] == 1:
+            det = np.sum(np.log(self._sigma_2))
+        else:
+            det = np.log(np.linalg.det(self._sigma_2))
+        if self._model_type == "global":
+            k = self._p + np.sum(self._s_vec)
+        elif self._model_type == "standard":
+            k = self._n * self._p + np.sum(self._s_vec)
+        else:
+            k = self._n * (self._p + np.sum(self._s_vec))
+        return det + 2 * k / (self._m - self._p)
+    
     def _to_networkx(self):
         """
         Convert the adjacency matrix to a NetworkX graph, which is stored in the nx_graph attribute.
