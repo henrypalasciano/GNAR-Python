@@ -6,7 +6,8 @@ from model_fitting import format_X_y, gnar_lr
 from forecasting import format_X, update_X
 from simulating import shift_X
 from neighbour_sets import neighbour_set_tensor
-from formatting import parameter_dataframe
+from formatting import gnar_parameter_dataframe
+from var import VAR
 
 class GNAR:
     def __init__(self, A, p, s_vec, ts=None, remove_mean=True, parameters=None, sigma_2=None, model_type="standard"):
@@ -36,10 +37,10 @@ class GNAR:
 
         Parameters:
             ts (np.ndarray or pd.DataFrame): The input time series data. Shape (m, n) where m is the number of observations and n is the number of nodes.
-            parameters (np.ndarray): The parameters of the GNAR model. Shape (n, p + sum(s_vec)).
+            parameters (np.ndarray): The parameters of the GNAR model, consisting of the means and coefficients. Shape (1 + p + sum(s_vec), n).
         """
         if ts is not None:
-            self._parameters = parameter_dataframe(self._p, self._s_vec, ts=ts)
+            self._parameters = gnar_parameter_dataframe(self._p, self._s_vec, ts=ts)
             if isinstance(ts, np.ndarray):
                 self.fit(ts, remove_mean)
             else:
@@ -48,7 +49,7 @@ class GNAR:
             if isinstance(parameters, pd.DataFrame):
                 self._parameters = parameters
             else:
-                self._parameters = parameter_dataframe(self._p, self._s_vec, parameters=parameters)
+                self._parameters = gnar_parameter_dataframe(self._p, self._s_vec, parameters=parameters)
             if sigma_2 is None:
                 self._sigma_2 = 1
             elif isinstance(sigma_2, (float, int, np.ndarray)):
@@ -157,6 +158,7 @@ class GNAR:
         # Number of nodes and coefficients
         n = self._n
         r = np.max(self._s_vec)
+        mu = self._parameters.iloc[0].to_numpy()
         coefficients = self._parameters.iloc[1:, :].to_numpy().T
 
         # Generate the noise
@@ -177,7 +179,7 @@ class GNAR:
         for t in range(self._p, burn_in + m):
             # Compute the simulated observation
             sim = np.sum(X * coefficients, axis=1) + e_t[t]
-            ts_sim[t] = sim
+            ts_sim[t] = sim.copy()
             # Update neighbour sums array
             if self._p == 1:
                 ns = (sim @ self._A_tensor).T
@@ -187,7 +189,7 @@ class GNAR:
             X = shift_X(X, sim, ns, self._p, self._s_vec)
 
         # Return the simulated time series data
-        return ts_sim[burn_in:]
+        return ts_sim[burn_in:] + mu
 
     def bic(self):
         """
@@ -235,6 +237,27 @@ class GNAR:
             k = self._n * (self._p + np.sum(self._s_vec))
         return det + 2 * k / (self._m - self._p)
     
+    def get_coefficients(self):
+        """
+        Fetch the coefficients of the model.
+        """
+        return self._parameters.iloc[1:]
+
+    def get_mean(self):
+        """
+        Fetch the means of the time series.
+        """
+        return self._parameters.iloc[[0]]
+
+    def get_var(self):
+        """
+        Fetch the variances or covariance matrix of the model.
+        """
+        return self._sigma_2
+    
+    def to_var(self):
+        pass
+
     def _to_networkx(self):
         """
         Convert the adjacency matrix to a NetworkX graph, which is stored in the nx_graph attribute.

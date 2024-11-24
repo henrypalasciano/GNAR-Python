@@ -65,7 +65,7 @@ def global_gnar_lr(X, y):
     design_matrix = np.transpose(X, (1, 0, 2)).reshape(n * m, k)
     target = y.T.reshape(-1,1)
     # Compute the coefficients using least squares regression
-    coeffs = np.zeros(n + k)
+    coeffs = np.zeros(k)
     valid_cols = np.sum(np.abs(design_matrix), axis=0) > 0
     coeffs[valid_cols] = np.linalg.lstsq(design_matrix[:, valid_cols], target, rcond=None)[0].flatten()
     # Remap the coefficients to the original shape
@@ -124,6 +124,7 @@ def local_gnar_lr(X, y):
     # Shape of the data
     m, n, k = np.shape(X)
     # Compute the coefficients for each node using least squares regression
+    coeff_mat = np.zeros((n, k))
     for i in range(n):
         X_i = X[:, i, :]
         valid_cols = np.sum(np.abs(X_i), axis=0) > 0

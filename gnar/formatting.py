@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-def parameter_dataframe(p, s_vec, ts=None, parameters=None):
+def gnar_parameter_dataframe(p, s_vec, ts=None, parameters=None):
     """
     Create a dataframe to store the parameters of the GNAR model.
 
