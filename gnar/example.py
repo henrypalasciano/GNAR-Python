@@ -33,4 +33,5 @@ G = GNAR(A, p=2, s_vec=np.array([1, 1]), parameters=np.array([[0,0,0], [1,2,3],[
 # %%
 print(G)
 # %%
-G = GNAR(A, p=2, s_vec=np.array([1, 1]), parameters=np.array([[0,0,0], [1,2,3],[2,3,4],[4,5,6],[7,8,9]]), sigma_2=0.5)
+G = GNAR(A, p=2, s_vec=np.array([1, 1]), parameters=np.array([[0,0,0], [1,2,3],[-2,3,4],[4,5,-6],[7,-8,9]]) / 10, sigma_2=0.5)
+# %%

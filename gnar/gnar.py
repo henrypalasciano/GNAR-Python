@@ -47,15 +47,12 @@ class GNAR:
                 self._parameters = parameters
             else:
                 self._parameters = parameter_dataframe(self._p, self._s_vec, parameters=parameters)
-            if sigma_2 is not None:
-                if isinstance(sigma_2, (float, int)):
-                    self._sigma_2 = np.full((1, parameters.shape[1]), sigma_2, dtype=float)
-                elif isinstance(sigma_2, pd.DataFrame):
-                    self._sigma_2 = sigma_2
-                else:
-                    self._sigma_2 = sigma_2.to_numpy().reshape(1, -1)
+            if sigma_2 is None:
+                self._sigma_2 = 1
+            elif isinstance(sigma_2, (float, int, np.ndarray)):
+                self._sigma_2 = sigma_2
             else:
-                self._sigma_2 = np.ones((1, parameters.shape[1]))
+                self._sigma_2 = sigma_2.to_numpy()
         else:
             raise ValueError("Either the input time series data or the coefficients must be provided.")
 
@@ -83,7 +80,8 @@ class GNAR:
         X,y = format_X_y(data, self._p, self._s_vec)
         # Fit the model for each node using least squares regression and save the coefficients to a DataFrame
         coefficients =  gnar_lr(X, y, self._p, self._s_vec, self._model_type)
-        self._sigma_2 = np.sum((np.sum(X * coefficients, axis=2) - y) ** 2, axis=0) / (m - self._p)
+        res = np.sum(X * coefficients, axis=2) - y
+        self._sigma_2 = res.T @ res / (m - self._p)
         self._parameters.iloc[1:, :] = coefficients.T
 
     def predict(self, ts, n_steps=1):
@@ -154,12 +152,22 @@ class GNAR:
         Returns:
             ts_sim (np.ndarray): The simulated time series data. Shape (m, n)
         """
-        if sigma_2 is None:
-            sigma_2 = self._sigma_2
         # Number of nodes and coefficients
         n = self._parameters.shape[1]
         r = np.max(self._s_vec)
         coefficients = self._parameters.iloc[1:, :].to_numpy().T
+
+        # Generate the noise
+        if sigma_2 is None:
+            sigma_2 = self._sigma_2
+        if isinstance(sigma_2, (float, int)):
+            e_t = np.random.normal(loc=0, scale=np.sqrt(sigma_2), size=(burn_in + m, n))
+        elif sigma_2.ndim == 1:
+            e_t = np.random.normal(loc=0, scale=np.sqrt(sigma_2), size=(burn_in + m, n))
+        elif sigma_2.shape[0] == 1:
+            e_t = np.random.normal(loc=0, scale=np.sqrt(sigma_2), size=(burn_in + m, n))
+        else:
+            e_t = np.random.multivariate_normal(mean=np.zeros(n), cov=sigma_2, size=burn_in + m)
         
         # Initialise the array to store the simulated time series data
         ts_sim = np.zeros([burn_in + m, n])
@@ -167,9 +175,8 @@ class GNAR:
         # Initialise the design matrix, which is an array of shape (n, p + sum(s))
         X = np.zeros([n, self._p + np.sum(self._s_vec)])
         for t in range(self._p, burn_in + m):
-            # Generate the noise and the simulated time series at time t
-            e_t = np.random.normal(loc=0, scale=np.sqrt(sigma_2), size=n)
-            sim = np.sum(X * coefficients, axis=1) + e_t
+            # Compute the simulated observation
+            sim = np.sum(X * coefficients, axis=1) + e_t[t]
             ts_sim[t] = sim
             # Update neighbour sums array
             if self._p == 1:
