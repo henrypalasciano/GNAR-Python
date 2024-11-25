@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-def gnar_parameter_dataframe(p, s_vec, ts=None, parameters=None):
+def parameter_df(p, s_vec, ts=None, parameters=None):
     """
     Create a dataframe to store the parameters of the GNAR model.
 
@@ -31,6 +31,23 @@ def gnar_parameter_dataframe(p, s_vec, ts=None, parameters=None):
         return pd.DataFrame(parameters, index=index, columns=columns, dtype=float)
 
     else:
-        raise ValueError("Either the input time series data or the coefficients must be provided.")
-        
+        raise ValueError("Either the input time series data or the coefficients must be provided.") 
+
+def cov_df(sigma_2, names):
+    """
+    Convert sigma_2 to a dataframe.
+
+    Parameters:
+        sigma_2 (int, float, np.ndarray or pd.DataFrame): The variance or covariance matrix.
+        names (list): The names of the nodes.
     
+    Returns:
+        pd.DataFrame. The covariance matrix as a dataframe.
+    """
+    if isinstance(sigma_2, (int, float)):
+        return pd.DataFrame(sigma_2 * np.eye(len(names)), index=names, columns=names)
+    elif isinstance(sigma_2, np.ndarray):
+        if sigma_2.ndim == 1 or sigma_2.shape[0] == 1:
+            return pd.DataFrame(np.diag(sigma_2.flatten()), index=names, columns=names)
+        return pd.DataFrame(sigma_2, index=names, columns=names)
+    return sigma_2
