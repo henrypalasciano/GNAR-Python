@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
-from model_fitting import format_X_y, gnar_lr
-from forecasting import format_X, update_X
-from simulating import shift_X
-from neighbour_sets import neighbour_set_mats
-from formatting import parameter_df, cov_df
+from utils.model_fitting import format_X_y, gnar_lr
+from utils.forecasting import format_X, update_X
+from utils.simulating import shift_X
+from utils.neighbour_sets import neighbour_set_mats
+from utils.formatting import parameter_df, cov_df
 from var import VAR
 
 class GNAR:

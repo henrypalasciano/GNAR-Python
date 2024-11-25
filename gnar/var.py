@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from formatting import parameter_df, cov_df
+from utils.formatting import parameter_df, cov_df
 
 class VAR:
     def __init__(self, p, ts=None, remove_mean=True, parameters=None, sigma_2=None):
