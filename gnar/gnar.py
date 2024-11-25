@@ -20,8 +20,8 @@ class GNAR:
             s_vec (np.ndarray): An array containing the maximum stage of neighbour dependence for each lag.
             ts (np.ndarray or pd.DataFrame): The input time series data. Shape (m, n) where m is the number of observations and n is the number of nodes.
             remove_mean (bool): Whether to remove the mean from the data. Only used if ts is provided.
-            parameters (np.ndarray): The parameters of the GNAR model, consisting of the means and coefficients. Shape (1 + p + sum(s_vec), n).
-            sigma_2 (float or np.ndarray): The variance or covariance of the noise. If a float, the same variance is used for all nodes. Only used if parameters is provided.
+            parameters (np.ndarray or pd.Datafram): The parameters of the GNAR model, consisting of the means and coefficients. Shape (1 + p + sum(s_vec), n).
+            sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the same variance is used for all nodes. Only used if parameters is provided.
             model_type (str): The type of GNAR model. Either "global", "standard" or "local".
         """
         self._A = A
@@ -42,12 +42,12 @@ class GNAR:
         Parameters:
             ts (np.ndarray or pd.DataFrame): The input time series data. Shape (m, n) where m is the number of observations and n is the number of nodes.
             remove_mean (bool): Whether to remove the mean from the data. Only used if ts is provided.
-            parameters (np.ndarray): The parameters of the GNAR model, consisting of the means and coefficients. Shape (1 + p + sum(s_vec), n).
-            sigma_2 (float or np.ndarray): The variance or covariance of the noise. If a float, the same variance is used for all nodes. Only used if parameters is provided.
+            parameters (np.ndarray or pd.DataFrame): The parameters of the GNAR model, consisting of the means and coefficients. Shape (1 + p + sum(s_vec), n).
+            sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the same variance is used for all nodes. Only used if parameters is provided.
         """
         # If a time series is provided, fit the model to the data, removing the mean if necessary
         if ts is not None:
-            self._parameters = parameter_df(self._p, self._s_vec, ts=ts)
+            self._parameters = parameter_df(self._p, self._n, s_vec=self._s_vec, ts=ts)
             if isinstance(ts, np.ndarray):
                 self.fit(ts, remove_mean)
             else:
@@ -57,7 +57,7 @@ class GNAR:
             if isinstance(parameters, pd.DataFrame):
                 self._parameters = parameters
             else:
-                self._parameters = parameter_df(self._p, self._s_vec, parameters=parameters)
+                self._parameters = parameter_df(self._p, self._n, s_vec=self._s_vec, parameters=parameters)
             if sigma_2 is None:
                 self._sigma_2 = 1
             elif isinstance(sigma_2, (float, int, np.ndarray)):
@@ -66,7 +66,7 @@ class GNAR:
                 self._sigma_2 = sigma_2.to_numpy()
             self._cov = cov_df(sigma_2, self._parameters.columns)
         else:
-            raise ValueError("Either the input time series data or the coefficients must be provided.")
+            raise ValueError("Either the input time series data or the parameters must be provided.")
 
     def fit(self, ts, remove_mean=True):
         """
@@ -77,7 +77,7 @@ class GNAR:
             remove_mean (bool): Whether to remove the mean from the data.
         """
         self._m, self._n = np.shape(ts)
-        # Compute the mean if necessary and save this to a DataFrame
+        # Compute the mean if necessary and save this to the parameter DataFrame
         if remove_mean:
             mu = np.mean(ts, axis=0, keepdims=True)
         else:
@@ -93,6 +93,7 @@ class GNAR:
         # Fit the model using least squares linear regression and save the coefficients to a DataFrame
         coefficients =  gnar_lr(X, y, self._p, self._s_vec, self._model_type)
         self._parameters.iloc[1:, :] = coefficients.T
+        
         # Compute the noise covariance matrix
         res = np.sum(X * coefficients, axis=2) - y
         self._sigma_2 = res.T @ res / (self._m - self._p)
@@ -104,11 +105,11 @@ class GNAR:
         Forecast future values of an input time series using the GNAR model.
 
         Parameters:
-            ts (ndarray): The input time series data. Shape (m, n) where m is the number of observations and n is the number of nodes.
+            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (m, n) where m is the number of observations and n is the number of nodes.
             n_steps (int): The number of steps ahead to forecast.
 
         Returns:
-            predictions (ndarray): The predicted values. Shape (m - 1 + p, n, n_steps)
+            predictions (np.ndarray or pd.DataFrame): The predicted values. Shape (m - 1 + p, n, n_steps)
         """
         # Data shapes
         m, n = ts.shape
@@ -120,7 +121,7 @@ class GNAR:
         is_df = isinstance(ts, pd.DataFrame)
         if is_df:
             ts_names = ts.columns
-            columns = pd.MultiIndex.from_product([ts_names, range(1, n_steps + 1)], names=['Time Series', 'Steps Ahead'])
+            columns = pd.MultiIndex.from_product([ts_names, range(1, n_steps + 1)], names=["Time Series", "Steps Ahead"])
             predictions_df = pd.DataFrame(index=ts.index[self._p - 1:], columns=columns, dtype=float)
             ts = ts.to_numpy()
         
@@ -128,7 +129,7 @@ class GNAR:
         mu = self._parameters.to_numpy()[0]
         coefficients = self._parameters.to_numpy()[1:].T
         
-        ts -= mu
+        ts = ts - mu
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (m, n, max(s) + 1)
         data = np.zeros([m, n, 1 + r])
         data[:, :, 0] = ts
@@ -144,7 +145,7 @@ class GNAR:
             predictions_df.loc[:, (ts_names, 1)] = predictions[:, :, 0] + mu
         for i in range(1, n_steps):
             # Update the lagged values and design matrix using the predicted values
-            lagged_vals = np.dstack([np.transpose(predictions[:, :, i-1] @ self._ns_mats, (1, 2, 0)), lagged_vals[:, :, :-r]])
+            lagged_vals = np.dstack([np.transpose(predictions[:, :, i - 1] @ self._ns_mats, (1, 2, 0)), lagged_vals[:, :, :-r]])
             # Update the design matrix
             X = update_X(X, predictions[:, :, i-1], lagged_vals, self._p, self._s_vec)
             # Compute the (i + 1) - step ahead predictions
@@ -152,7 +153,7 @@ class GNAR:
             if is_df:
                 predictions_df.loc[:, (ts_names, i + 1)] = predictions[:, :, i] + mu
         
-        # Return the predictions
+        # Return the predictions, adding the mean back to the data if necessary
         if is_df:
             return predictions_df
         return predictions + mu.reshape(1, n, 1)
@@ -163,7 +164,7 @@ class GNAR:
 
         Parameters:
             m (int): The number of time steps to simulate.
-            sigma_2 (float or np.ndarray): The variance of the noise. If a float, the same variance is used for all nodes. If an array, the variances are used for each node.
+            sigma_2 (int, float or np.ndarray): The variance of the noise. If an int or a float, the same variance is used for all time series.
             burn_in (int): The number of burn-in steps to discard.
         
         Returns:
@@ -202,7 +203,7 @@ class GNAR:
             # Shift the design matrix with the new simulated values and neighbour sums
             X = shift_X(X, sim, ns, self._p, self._s_vec)
 
-        # Return the simulated time series data
+        # Return the simulated time series data, adding the mean to the data
         return ts_sim[burn_in:] + mu
 
     def bic(self):
@@ -229,6 +230,7 @@ class GNAR:
             k = self._n * self._p + np.sum(self._s_vec)
         else:
             k = self._n * (self._p + np.sum(self._s_vec))
+        # Compute the BIC
         return det + k * np.log(self._m - self._p) / (self._m - self._p)
 
     def aic(self):
@@ -255,6 +257,7 @@ class GNAR:
             k = self._n * self._p + np.sum(self._s_vec)
         else:
             k = self._n * (self._p + np.sum(self._s_vec))
+        # Compute the AIC
         return det + 2 * k / (self._m - self._p)
     
     def get_parameters(self):
@@ -279,7 +282,7 @@ class GNAR:
         # Get the mean and coefficients
         mu = self._parameters.iloc[0].to_numpy()
         coefficients = self._parameters.iloc[1:].to_numpy()
-        var_coefficients = []
+        var_coefficients = [mu]
         seen = 0
         # Construct a matrix for each lag of the model
         for i in range(self._p):
@@ -291,8 +294,11 @@ class GNAR:
                 coeffs += self._ns_mats[j] * coefficients[self._p + seen + j]
             seen += s
             var_coefficients.append(coeffs)
+        # Create a parameter DataFrame for the VAR model with the same column names as the GNAR model
+        var_parameters =  parameter_df(self._p, self._n, parameters=np.vstack(var_coefficients))
+        var_parameters.columns = self._parameters.columns
         # Return the VAR model
-        return VAR(p=self._p, coefficients=np.vstack(var_coefficients), mu=mu, sigma_2=self._sigma_2)
+        return VAR(p=self._p, parameters=var_parameters, sigma_2=self._sigma_2)
 
     def _to_networkx(self):
         """
@@ -308,9 +314,11 @@ class GNAR:
         nx.draw(self.nx_graph, with_labels=True)
 
     def __str__(self):
+        """
+        Return a string representation of the GNAR model.
+        """
         model_info = f"{self._model_type.capitalize()} GNAR({self._p}, {self._s_vec}) Model\n"
         graph_info = f"{self.nx_graph}\n"
         parameter_info = f"Parameters:\n{self._parameters}\n"
-        names = self._parameters.columns
         noise = f"Noise covariance matrix:\n{self._cov}\n"
         return model_info + graph_info + parameter_info + noise
