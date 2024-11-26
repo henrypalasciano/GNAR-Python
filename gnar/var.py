@@ -1,9 +1,21 @@
 import numpy as np
 import pandas as pd
 
-from utils.formatting import parameter_df, cov_df
+from gnar.utils.formatting import parameter_df, cov_df
 
 class VAR:
+    """
+    Vector Autoregressive (VAR) model.
+
+    Methods:
+        fit: Fit the VAR model to the time series data.
+        predict: Forecast future values of an input time series using the VAR model.
+        simulate: Simulate data from the VAR model.
+        bic: Compute the Bayesian Information Criterion (BIC) for the VAR model.
+        aic: Compute the Akaike Information Criterion (AIC) for the VAR model.
+        get_parameters: Fetch the parameters of the model.
+        get_covariance: Fetch the covariance matrix of the model.
+    """
     def __init__(self, p, ts=None, remove_mean=True, parameters=None, sigma_2=None):
         """
         Initialise the VAR model.

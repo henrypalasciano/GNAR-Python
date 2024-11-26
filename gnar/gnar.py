@@ -2,14 +2,31 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
-from utils.model_fitting import format_X_y, gnar_lr
-from utils.forecasting import format_X, update_X
-from utils.simulating import shift_X
-from utils.neighbour_sets import neighbour_set_mats
-from utils.formatting import parameter_df, cov_df
-from var import VAR
+from gnar.utils.model_fitting import format_X_y, gnar_lr
+from gnar.utils.forecasting import format_X, update_X
+from gnar.utils.simulating import shift_X
+from gnar.utils.neighbour_sets import neighbour_set_mats
+from gnar.utils.formatting import parameter_df, cov_df
+from gnar.var import VAR
 
 class GNAR:
+    """
+    The GNAR model class.
+
+    Attributes:
+        nx_graph (networkx.Graph): The graph representation of the GNAR model.
+
+    Methods:
+        fit: Fit the GNAR model to the time series data.
+        predict: Forecast future values of an input time series using the GNAR model.
+        simulate: Simulate data from the GNAR model.
+        bic: Compute the Bayesian Information Criterion (BIC) for the GNAR model.
+        aic: Compute the Akaike Information Criterion (AIC) for the GNAR model.
+        get_parameters: Fetch the parameters of the model.
+        get_covariance: Fetch the covariance matrix of the model.
+        to_var: Convert the GNAR model to VAR model format.
+        draw: Draw the graph using NetworkX.
+    """
     def __init__(self, A, p, s_vec, ts=None, remove_mean=True, parameters=None, sigma_2=None, model_type="standard"):
         """
         Initialise the GNAR model.
