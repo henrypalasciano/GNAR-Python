@@ -105,11 +105,11 @@ class VAR:
         Forecast future values of an input time series using the VAR model.
 
         Parameters:
-            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of time series.
+            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
             h (int): The number of steps ahead to forecast.
 
         Returns:
-            predictions (np.ndarray or pd.DataFrame): The predicted values. Shape (n - p + 1, d, h)
+            predictions (np.ndarray or pd.DataFrame): The predicted values. Shape (n + p - 1, d, h) if numpy array, or (n + p - 1, d * h) if DataFrame.
         """
         n, d = ts.shape
         if d != self._d:

@@ -88,7 +88,7 @@ class GNAR:
         Fit the GNAR model to the time series data.
 
         Parameters:
-            ts (ndarray): The input time series data. Shape (m, n) where m is the number of observations and d is the number of nodes.
+            ts (ndarray): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
             remove_mean (bool): Whether to remove the mean from the data.
         """
         self._n, self._d = np.shape(ts)
@@ -100,7 +100,7 @@ class GNAR:
         ts = ts - mu
         self._parameters.loc["mean", :] = mu
 
-        # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (m, n, max(s) + 1)
+        # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (n, d, 1 + r), where r = max(s)
         data = np.zeros([self._n, self._d, 1 + np.max(self._s)])
         data[:, :, 0] = ts
         data[:, :, 1:] = np.transpose(ts @ self._ns_mats, (1, 2, 0))
@@ -120,11 +120,11 @@ class GNAR:
         Forecast future values of an input time series using the GNAR model.
 
         Parameters:
-            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (m, d) where m is the number of observations and d is the number of nodes.
+            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
             h (int): The number of steps ahead to forecast.
 
         Returns:
-            predictions (np.ndarray or pd.DataFrame): The predicted values. Shape (m - 1 + p, d, h)
+            predictions (np.ndarray or pd.DataFrame): The predicted values. Shape (n + p - 1, d, h) if numpy array, or (n + p - 1, d * h) if DataFrame.
         """
         # Data shapes
         n, d = ts.shape

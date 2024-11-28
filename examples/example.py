@@ -6,6 +6,7 @@ from gnar.gnar import GNAR
 # %%
 # Generate some random data
 ts = np.random.normal(0, 1, (100, 3))
+# Create an adjacency matrix
 A = np.array([[0, 1, 0], 
               [1, 0, 1],
               [0, 1, 0]])
@@ -17,7 +18,7 @@ print(G)
 print(G.bic())
 print(G.aic())
 # %%
-# Can fit the model to new data
+# We can also re-fit the model to new data
 ts = np.random.normal(0, 1, (100, 3))
 G.fit(ts)
 print(G)
@@ -29,22 +30,13 @@ G.draw()
 V = G.to_var()
 print(V)
 # %%
-# Simulate from the GNAR model
+# Simulate from the GNAR model - the output is a numpy array of shape 
+# (n, d) where n is the number of observations and d the number of nodes
 sim = G.simulate(100)
+sim
 # %%
-# Forecast using the GNAR model
-preds = G.predict(ts[-3:].copy(), 5)
-# %%
-# Convert the data to a pandas dataframe and repeat the steps above
-ts_df = pd.DataFrame(ts, columns=["A", "B", "C"])
-G = GNAR(A, p=2, s=np.array([1, 1]), ts=ts_df, model_type="standard")
-print(G)
-# %%
-sim = G.predict(ts_df[-5:].copy(), 5)
-# %%
-# Initialise a GNAR model from some parameters rather than fitting the model. 
-# First row is the mean, followed by the alpha and beta coefficients.
-params = np.array([[0,0,0], [0.1, 0.3, -0.2], [0.4, -0.2, 0.1]])
-G = GNAR(A, p=1, s=np.array([1, 1]), parameters=params, sigma_2=0.5, model_type="local")
-print(G)
+# Forecast using the GNAR model - since the input is a numpy array, 
+# the output is a numpy array of shape (n - p + 1, d, h)
+preds = G.predict(ts=np.random.normal(0, 1, (10, 3)), h=5)
+preds
 # %%
