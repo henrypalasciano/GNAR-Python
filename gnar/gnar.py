@@ -11,7 +11,7 @@ from gnar.var import VAR
 
 class GNAR:
     """
-    The GNAR model class for a d-dimensional mutivariate time series.
+    Generalised Network Autoregressive (GNAR) model. Can be initialiased by either fitting the model to time series data or providing the model parameters.
 
     Parameters:
         A (np.ndarray): The adjacency matrix of the graph.
@@ -27,9 +27,9 @@ class GNAR:
     Methods:
         fit: Fit the GNAR model to time series data.
         predict: Forecast future values of an input time series using the GNAR model.
-        simulate: Simulate data from the GNAR model.
-        bic: Compute the Bayesian Information Criterion (BIC) for the GNAR model.
-        aic: Compute the Akaike Information Criterion (AIC) for the GNAR model.
+        simulate: Simulate a realisation from the GNAR model.
+        bic: Compute the Bayesian Information Criterion (BIC).
+        aic: Compute the Akaike Information Criterion (AIC).
         to_var: Convert the GNAR model to VAR model format.
         to_networkx: Convert the adjacency matrix to a NetworkX graph. 
         draw: Draw the graph using NetworkX.
@@ -62,12 +62,12 @@ class GNAR:
             self.fit(ts.copy(), demean)
         elif coeffs is not None:
             # If the parameters are provided, set up using these
-            self._parameter_setup(model_type, coeffs, mean, sigma_2)    
+            self._parameter_setup(coeffs, mean, sigma_2)    
             self._n = None    
         else:
             raise ValueError("Either the input time series data or the model parameters are required.")
 
-    def _parameter_setup(self, model_type, coeffs, mean, sigma_2):
+    def _parameter_setup(self, coeffs, mean, sigma_2):
         # Store the coefficients
         if isinstance(coeffs, np.ndarray):
             self.coeffs = coeffs
@@ -77,17 +77,9 @@ class GNAR:
             self._names = coeffs.columns
         else:
             raise ValueError("Coefficients must be a NumPy array or a Pandas DataFrame.")
-        # Check the dimensions of the coefficients matrix
-        k, self._d = np.shape(self.coeffs)
-        if self._d != A.shape[0]:
-            raise ValueError("The number of nodes in the adjacency matrix does not match the number of nodes in the coefficients matrix.")
-        if k != self._p + np.sum(self._s):
-            raise ValueError("The number of coefficients does not match the number of parameters.")
-        unique_params = np.apply_along_axis(lambda row: len(np.unique(row)), axis=1, arr=self.coeffs)
-        if self._model_type == "global" and np.any(unique_params != 1):
-            raise ValueError("The model type is global, but the coefficients are not the same for all nodes.")
-        elif self._model_type == "standard" and np.any(unique_params[self._d * self._p:] != 1):
-            raise ValueError("The model type is standard, but the beta coefficients are not the same for all nodes.")
+        # Check the dimensions and structure of the coefficients matrix
+        self._d = A.shape[0]
+        check_gnar_coeffs(self.coeffs, self._d, self._p, self._s, self._model_type)
         # Store the mean of the time series data and the covariance matrix of the noise
         self.mu = set_mean(mean, self._d)
         self.sigma_2 = set_cov(sigma_2)

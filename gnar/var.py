@@ -6,7 +6,7 @@ from gnar.utils.data_utils import *
 
 class VAR:
     """
-    Vector Autoregressive (VAR) model.
+    Vector Autoregressive (VAR) model. Can be initialiased by either fitting the model to time series data or providing the model parameters.
 
     Parameters:
         p (int): The number of lags.
@@ -18,9 +18,9 @@ class VAR:
     Methods:
         fit: Fit the VAR model to the time series data.
         predict: Forecast future values of an input time series using the VAR model.
-        simulate: Simulate data from the VAR model.
-        bic: Compute the Bayesian Information Criterion (BIC) for the VAR model.
-        aic: Compute the Akaike Information Criterion (AIC) for the VAR model.
+        simulate: Simulate a realisation from the VAR model.
+        bic: Compute the Bayesian Information Criterion (BIC).
+        aic: Compute the Akaike Information Criterion (AIC).
     """
     def __init__(self, p, ts=None, demean=True, coeffs=None, mean=1, sigma_2=1):
         # Initial checks
@@ -49,8 +49,6 @@ class VAR:
             raise ValueError("Coefficients must be a NumPy array or a Pandas DataFrame.")
         # Check the dimensions of the coefficients matrix
         k, self._d = np.shape(self.coeffs)
-        if self._d != A.shape[0]:
-            raise ValueError("The number of nodes in the adjacency matrix does not match the number of nodes in the coefficients matrix.")
         if k != self._p * self._d:
             raise ValueError("The number of coefficients does not match the number of parameters.")
         # Store the mean of the time series data and the covariance matrix of the noise
