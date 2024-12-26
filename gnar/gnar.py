@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
-from gnar.utils.model_fitting import format_X_y, gnar_lr
+from gnar.utils.model_fitting import gnar_lr
 from gnar.utils.forecasting import format_X, update_X
 from gnar.utils.simulating import shift_X, generate_noise
 from gnar.utils.neighbour_sets import neighbour_set_mats
@@ -134,14 +134,10 @@ class GNAR:
         data = np.zeros([self._n, self._d, 1 + np.max(self._s)])
         data[:, :, 0] = ts
         data[:, :, 1:] = np.transpose(ts @ self._ns_mats, (1, 2, 0))
-        X,y = format_X_y(data, self._p, self._s)
-        # Fit the model using least squares linear regression and save the coefficients to a DataFrame
-        coeffs = gnar_lr(X, y, self._p, self._s, self._model_type)
+        # Fit the model using least squares linear regression
+        coeffs, sigma_2 = gnar_lr(data, self._p, self._s, self._model_type)
         self._coeffs = coeffs.T
-        
-        # Compute the noise covariance matrix
-        res = np.sum(X * coeffs, axis=2) - y
-        self._sigma_2 = res.T @ res / (self._n - self._p)
+        self._sigma_2 = sigma_2
 
     def predict(self, ts, h=1):
         """
@@ -300,7 +296,7 @@ class GNAR:
     
     def get_coeffs(self):
         """
-        Fetch the parameters of the model.
+        Fetch the coefficients of the model.
         """
         return self._coeffs
 
@@ -312,7 +308,7 @@ class GNAR:
 
     def get_cov(self):
         """
-        Fetch the covariance matrix of the model.
+        Fetch the covariance matrix of the noise.
         """
         return self._sigma_2
     
