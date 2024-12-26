@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 
-from gnar.utils.formatting import parameter_df, cov_df
 from gnar.utils.simulating import generate_noise
 
 class VAR:
@@ -17,89 +16,100 @@ class VAR:
         get_parameters: Fetch the parameters of the model.
         get_covariance: Fetch the covariance matrix of the model.
     """
-    def __init__(self, p, ts=None, remove_mean=True, parameters=None, sigma_2=1):
+    def __init__(self, p, ts=None, demean=True, coeffs=None, mean=1, sigma_2=1):
         """
         Initialise the VAR model.
 
         Parameters:
             p (int): The number of lags.
             ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of time series.
-            remove_mean (bool): Whether to remove the mean from the data. Only used if ts is provided.
+            demean (bool): Whether to remove the mean from the data. Only used if ts is provided.
             parameters (np.ndarray or pd.DataFrame): The parameters of the VAR model, consisting of the means and coefficients. Shape (1 + p * d, d).
             sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the same variance is used for all time series. Only used if parameters is provided.
         """
+        # Initial checks
+        if p < 1:
+            raise ValueError("The number of lags p must be at least 1.")
+
         self._p = p
-        self._n = None
-        self._d = None
-        self._model_setup(ts, remove_mean, parameters, sigma_2)
-
-    def _model_setup(self, ts, remove_mean, parameters, sigma_2):
-        """
-        Setup the GNAR model.
-
-        Parameters:
-            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of time series.
-            remove_mean (bool): Whether to remove the mean from the data. Only used if ts is provided.
-            parameters (np.ndarray or pd.DataFrame): The parameters of the VAR model, consisting of the means and coefficients. Shape (1 + p * d, d).
-            sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the same variance is used for all time series. Only used if parameters is provided.
-        """
-        # If a time series is provided, fit the model to the data, removing the mean if necessary
         if ts is not None:
-            self._n, self._d = ts.shape
-            self._parameters = parameter_df(self._p, ts.shape[1], ts=ts)
-            if isinstance(ts, np.ndarray):
-                self.fit(ts, remove_mean)
-            else:
-                self.fit(ts.to_numpy(), remove_mean)
-        # If the parameters are provided, set the parameters and covariance matrix
-        elif parameters is not None:
-            self._d = parameters.shape[1]
-            if isinstance(parameters, pd.DataFrame):
-                self._parameters = parameters
-            else:
-                self._parameters = parameter_df(self._p, self._d, parameters=parameters)
-            if isinstance(sigma_2, (float, int, np.ndarray)):
-                self._sigma_2 = sigma_2
-            else:
-                self._sigma_2 = sigma_2.to_numpy()
-            self._cov = cov_df(sigma_2, self._parameters.columns)
+            # If a time series is provided, fit the model to the data, removing the mean if necessary
+            self.fit(ts.copy(), demean)
+        elif coeffs is not None:
+            # If the parameters are provided, set up using these
+            self._parameter_setup(coeffs, mean, sigma_2)        
         else:
-            raise ValueError("Either the input time series data or the parameters are required.")
+            raise ValueError("Either the input time series data or the model parameters are required.")
+
+    def _parameter_setup(self, coeffs, mean, sigma_2):
+        # Store the coefficients
+        if isinstance(coeffs, np.ndarray):
+            self._coeffs = coeffs
+            self._names = np.arange(1, np.shape(coeffs)[1] + 1)
+        elif isinstance(coeffs, pd.DataFrame):
+            self._coeffs = coeffs.to_numpy()
+            self._names = coeffs.columns
+        else:
+            raise ValueError("Coefficients must be a NumPy array or a Pandas DataFrame.")
+        # Check the dimensions of the coefficients matrix
+        k, self._d = np.shape(self._coeffs)
+        if self._d != A.shape[0]:
+            raise ValueError("The number of nodes in the adjacency matrix does not match the number of nodes in the coefficients matrix.")
+        if k != self._p * self._d:
+            raise ValueError("The number of coefficients does not match the number of parameters.")
+        # Store the mean
+        if isinstance(mean, (float, int)):
+            self._mu = np.repeat(mean, self._d).reshape(1, self._d)
+        elif isinstance(mean, np.ndarray):
+            self._mu = mean.reshape(1, self._d)
+        elif isinstance(mean, pd.DataFrame):
+            self._mu = mean.to_numpy().reshape(1, self._d)
+        else:
+            raise ValueError("Mean must be a float, int, NumPy array or Pandas DataFrame.")
+        # Store the noise covariance matrix
+        if isinstance(sigma_2, (float, int, np.ndarray)):
+            self._sigma_2 = sigma_2
+        elif isinstance(sigma_2, pd.DataFrame):
+            self._sigma_2 = sigma_2.to_numpy()
+        else:
+            raise ValueError("Noise covariance matrix must be a float, int, NumPy array or Pandas DataFrame.")
     
-    def fit(self, ts, remove_mean):
+    def fit(self, ts, demean):
         """
         Fit the VAR model to the time series data.
 
         Parameters:
             ts (ndarray): The input time series data. Shape (n, d) where n is the number of observations and d is the number of time series.
-            remove_mean (bool): Whether to remove the mean from the data.
+            demean (bool): Whether to remove the mean from the data.
         """
-        n, d = self._n, self._d
-        # Compute the mean if necessary and save this to the parameter DataFrame
-        if remove_mean:
-            mu = np.mean(ts, axis=0, keepdims=True)
+        self._n, self._d = n, d = np.shape(ts)
+        if isinstance(ts, pd.DataFrame):
+            self._names = ts.columns
+            ts = ts.to_numpy()
         else:
-            mu = np.zeros((1, d))
-        ts = ts - mu
-        self._parameters.loc["mean"] = mu
+            self._names = np.arange(1, self._d + 1)
+        # Compute the mean if necessary and save this to the parameter DataFrame
+        if demean:
+            self._mu = mu = np.mean(ts, axis=0, keepdims=True)
+        else:
+            self._mu = mu = np.zeros((1, self._d))
+        ts -= mu
 
         X = np.zeros((n - self._p, self._p * d))
         y = ts[self._p:]
         # Fill the design matrix with the lagged values
         for i in range(self._p):
             X[:, d * i : d * (i + 1)] = ts[self._p - i - 1 : n - i - 1, :]
-        coefficients = np.zeros((d * self._p, d))
+        coeffs = np.zeros((d * self._p, d))
         for j in range(d):
             # Fit the model using least squares regression
-            coefficients[:, j] = np.linalg.lstsq(X, y[:, j], rcond=None)[0]
-        self._parameters.iloc[1:] = coefficients
+            coeffs[:, j] = np.linalg.lstsq(X, y[:, j], rcond=None)[0]
+        self._coeffs = coeffs
         
         # Compute the noise covariance matrix
-        res = X @ coefficients - y
+        res = X @ coeffs - y
         self._sigma_2 = res.T @ res / (n - self._p)
-        # Store the covariance matrix as a DataFrame for display purposes
-        self._cov = pd.DataFrame(self._sigma_2, index=self._parameters.columns, columns=self._parameters.columns, dtype=float)
-    
+        
     def predict(self, ts, h=1):
         """
         Forecast future values of an input time series using the VAR model.
@@ -124,8 +134,8 @@ class VAR:
             ts = ts.to_numpy()
         
         # Get the mean and coefficients
-        mu = self._parameters.to_numpy()[0]
-        coefficients = self._parameters.to_numpy()[1:]
+        mu = self._mu
+        coeffs = self._coeffs
 
         ts = ts - mu
         # Fill the design matrix with the lagged values
@@ -136,7 +146,7 @@ class VAR:
         # Compute the predictions
         predictions = np.zeros([n - self._p + 1, d, h])
         for i in range(h):
-            predictions[:, :, i] = X @ coefficients
+            predictions[:, :, i] = X @ coeffs
             # Update the design matrix
             if self._p == 1:
                 X = predictions[:, :, i]
@@ -149,7 +159,6 @@ class VAR:
         if is_df:
             return predictions_df
         return predictions + mu.reshape(1, d, 1)
-
 
     def simulate(self, n, sigma_2=None, burn_in=50):
         """
@@ -164,8 +173,8 @@ class VAR:
             ts_sim (np.ndarray): The simulated time series data. Shape (n, d)
         """
         d = self._d
-        mu = self._parameters.iloc[0].to_numpy()
-        coefficients = self._parameters.iloc[1:, :].to_numpy().T
+        mu = self._mu
+        coeffs = self._coeffs.T
 
         # Generate the noise - depending on the structure of sigma_2, different sampling methods are used. E.g, if sigma_2 is a scalar, the noise is sampled from np.random.normal, which is faster than using np.random.multivariate_normal using a diagonal covariance matrix.
         if sigma_2 is None:
@@ -177,7 +186,7 @@ class VAR:
         X = np.zeros(self._p * d)
         for t in range(self._p, burn_in + n):
             # Compute the simulated observation
-            sim = coefficients @ X + e_t[t]
+            sim = coeffs @ X + e_t[t]
             ts_sim[t] = sim.copy()
             # Update the design matrix
             if self._p == 1:
@@ -196,7 +205,7 @@ class VAR:
         """
         # Compute the BIC only if the model was fitted using time series data
         if self._n is None:
-            raise ValueError("The model has not been fitted.")
+            raise ValueError("The model was not fit.")
         # Compute the log determinant of the noise covariance matrix
         if isinstance(self._sigma_2, (float, int)):
             det = self._d * np.log(self._sigma_2)
@@ -218,7 +227,7 @@ class VAR:
         """
         # Compute the AIC only if the model was fitted using time series data
         if self._n is None:
-            raise ValueError("The model has not been fitted.")
+            raise ValueError("The model was not fit.")
         # Compute the log determinant of the noise covariance matrix
         if isinstance(self._sigma_2, (float, int)):
             det = self._d * np.log(self._sigma_2)
@@ -248,6 +257,16 @@ class VAR:
         Return a string representation of the VAR model.
         """
         model_info = f"VAR({self._p}) Model\n"
-        parameter_info = f"Parameters:\n{self._parameters}\n"
-        noise = f"Noise covariance matrix:\n{self._cov}\n"
+        index = ["mean"] + [f"a_{i},{j}" for i in range(1, self._p + 1) for j in range(1, self._d + 1)]
+        parameters = pd.DataFrame(np.vstack([self._mu, self._coeffs]), columns=self._names, index=index)
+        parameters.columns.name = "ts"
+        parameter_info = f"Parameters:\n{parameters}\n"
+        if isinstance(self._sigma_2, (int, float)):
+            cov = pd.DataFrame(self._sigma_2 * np.eye(self._d), index=self._names, columns=self._names)
+        elif isinstance(self._sigma_2, np.ndarray) and (self._sigma_2.ndim == 1 or self._sigma_2.shape[0] == 1):
+            cov =  pd.DataFrame(np.diag(self._sigma_2.flatten()), index=self._names, columns=self._names)
+        else:
+            cov = pd.DataFrame(self._sigma_2, index=self._names, columns=self._names)
+        cov.columns.name = "ts"
+        noise = f"Noise covariance matrix:\n{cov}\n"
         return model_info + parameter_info + noise
