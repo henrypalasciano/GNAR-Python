@@ -18,8 +18,6 @@ class GNAR:
         simulate: Simulate data from the GNAR model.
         bic: Compute the Bayesian Information Criterion (BIC) for the GNAR model.
         aic: Compute the Akaike Information Criterion (AIC) for the GNAR model.
-        get_parameters: Fetch the parameters of the model.
-        get_covariance: Fetch the covariance matrix of the noise.
         to_var: Convert the GNAR model to VAR model format.
         to_networkx: Convert the adjacency matrix to a NetworkX graph. 
         draw: Draw the graph using NetworkX.
@@ -74,38 +72,38 @@ class GNAR:
     def _parameter_setup(self, model_type, coeffs, mean, sigma_2):
         # Store the coefficients
         if isinstance(coeffs, np.ndarray):
-            self._coeffs = coeffs
+            self.coeffs = coeffs
             self._names = np.arange(1, np.shape(coeffs)[1] + 1)
         elif isinstance(coeffs, pd.DataFrame):
-            self._coeffs = coeffs.to_numpy()
+            self.coeffs = coeffs.to_numpy()
             self._names = coeffs.columns
         else:
             raise ValueError("Coefficients must be a NumPy array or a Pandas DataFrame.")
         # Check the dimensions of the coefficients matrix
-        k, self._d = np.shape(self._coeffs)
+        k, self._d = np.shape(self.coeffs)
         if self._d != A.shape[0]:
             raise ValueError("The number of nodes in the adjacency matrix does not match the number of nodes in the coefficients matrix.")
         if k != self._p + np.sum(self._s):
             raise ValueError("The number of coefficients does not match the number of parameters.")
-        unique_params = np.apply_along_axis(lambda row: len(np.unique(row)), axis=1, arr=self._coeffs)
+        unique_params = np.apply_along_axis(lambda row: len(np.unique(row)), axis=1, arr=self.coeffs)
         if self._model_type == "global" and np.any(unique_params != 1):
             raise ValueError("The model type is global, but the coefficients are not the same for all nodes.")
         elif self._model_type == "standard" and np.any(unique_params[self._d * self._p:] != 1):
             raise ValueError("The model type is standard, but the beta coefficients are not the same for all nodes.")
         # Store the mean
         if isinstance(mean, (float, int)):
-            self._mu = np.repeat(mean, self._d).reshape(1, self._d)
+            self.mu = np.repeat(mean, self._d).reshape(1, self._d)
         elif isinstance(mean, np.ndarray):
-            self._mu = mean.reshape(1, self._d)
+            self.mu = mean.reshape(1, self._d)
         elif isinstance(mean, pd.DataFrame):
-            self._mu = mean.to_numpy().reshape(1, self._d)
+            self.mu = mean.to_numpy().reshape(1, self._d)
         else:
             raise ValueError("Mean must be a float, int, NumPy array or Pandas DataFrame.")
         # Store the noise covariance matrix
         if isinstance(sigma_2, (float, int, np.ndarray)):
-            self._sigma_2 = sigma_2
+            self.sigma_2 = sigma_2
         elif isinstance(sigma_2, pd.DataFrame):
-            self._sigma_2 = sigma_2.to_numpy()
+            self.sigma_2 = sigma_2.to_numpy()
         else:
             raise ValueError("Noise covariance matrix must be a float, int, NumPy array or Pandas DataFrame.")
 
@@ -125,9 +123,9 @@ class GNAR:
             self._names = np.arange(1, self._d + 1)
         # Compute the mean if necessary and save this to the parameter DataFrame
         if demean:
-            self._mu = mu = np.mean(ts, axis=0, keepdims=True)
+            self.mu = mu = np.mean(ts, axis=0, keepdims=True)
         else:
-            self._mu = mu = np.zeros((1, self._d))
+            self.mu = mu = np.zeros((1, self._d))
         ts -= mu
 
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (n, d, 1 + r), where r = max(s)
@@ -136,8 +134,8 @@ class GNAR:
         data[:, :, 1:] = np.transpose(ts @ self._ns_mats, (1, 2, 0))
         # Fit the model using least squares linear regression
         coeffs, sigma_2 = gnar_lr(data, self._p, self._s, self._model_type)
-        self._coeffs = coeffs.T
-        self._sigma_2 = sigma_2
+        self.coeffs = coeffs.T
+        self.sigma_2 = sigma_2
 
     def predict(self, ts, h=1):
         """
@@ -148,7 +146,7 @@ class GNAR:
             h (int): The number of steps ahead to forecast.
 
         Returns:
-            predictions (np.ndarray or pd.DataFrame): The predicted values. Shape (n + p - 1, d, h) if numpy array, or (n + p - 1, d * h) if DataFrame.
+            preds (np.ndarray or pd.DataFrame): The predicted values. Shape (n + p - 1, d, h) if numpy array, or (n + p - 1, d * h) if DataFrame.
         """
         # Data shapes
         n, d = ts.shape
@@ -156,17 +154,16 @@ class GNAR:
         if d != self._d:
             raise ValueError("The number of time series does not match the number of nodes in the model.")
 
+        # Get the mean and coefficients
+        mu = self.mu
+        coeffs = self.coeffs.T
+
         # If the input is a DataFrame, create a DataFrame to store the predictions
         is_df = isinstance(ts, pd.DataFrame)
         if is_df:
-            ts_names = ts.columns
-            columns = pd.MultiIndex.from_product([ts_names, range(1, h + 1)], names=["Time Series", "Steps Ahead"])
-            predictions_df = pd.DataFrame(index=ts.index[self._p - 1:], columns=columns, dtype=float)
+            columns = pd.MultiIndex.from_product([ts.columns, range(1, h + 1)], names=["Time Series", "Steps Ahead"])
+            index = ts.index[self._p - 1:]
             ts = ts.to_numpy()
-        
-        # Get the mean and coefficients
-        mu = self._mu
-        coeffs = self._coeffs.T
         
         ts = ts - mu
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (n, d, 1 + r)
@@ -177,25 +174,22 @@ class GNAR:
         X, lagged_vals = format_X(data, self._p, self._s)
 
         # Initialise the array to store the predictions, which is an array of shape (n - p + 1, d, h)
-        predictions = np.zeros([n - self._p + 1, d, h])
+        preds = np.zeros([n - self._p + 1, d, h])
         # Compute the one-step ahead predictions
-        predictions[:, :, 0] = np.sum(X * coeffs, axis=2)
-        if is_df:
-            predictions_df.loc[:, (ts_names, 1)] = predictions[:, :, 0] + mu
+        preds[:, :, 0] = np.sum(X * coeffs, axis=2)
         for i in range(1, h):
             # Update the lagged values and design matrix using the predicted values
-            lagged_vals = np.dstack([np.transpose(predictions[:, :, i - 1] @ self._ns_mats, (1, 2, 0)), lagged_vals[:, :, :-r]])
+            lagged_vals = np.dstack([np.transpose(preds[:, :, i - 1] @ self._ns_mats, (1, 2, 0)), lagged_vals[:, :, :-r]])
             # Update the design matrix
-            X = update_X(X, predictions[:, :, i-1], lagged_vals, self._p, self._s)
+            X = update_X(X, preds[:, :, i-1], lagged_vals, self._p, self._s)
             # Compute the (i + 1) - step ahead predictions
-            predictions[:, :, i] = np.sum(X * coeffs, axis=2)
-            if is_df:
-                predictions_df.loc[:, (ts_names, i + 1)] = predictions[:, :, i] + mu
-        
+            preds[:, :, i] = np.sum(X * coeffs, axis=2)
+            
+        preds = preds + mu.reshape(1, d, 1)
         # Return the predictions, adding the mean back to the data if necessary
         if is_df:
-            return predictions_df
-        return predictions + mu.reshape(1, d, 1)
+            return pd.DataFrame(preds.reshape(n - self._p + 1, d * h), index=index, columns=columns, dtype=float)
+        return preds
 
     def simulate(self, n, sigma_2=None, burn_in=50):
         """
@@ -212,12 +206,12 @@ class GNAR:
         # Number of nodes and coefficients
         d = self._d
         r = np.max(self._s)
-        mu = self._mu
-        coeffs = self._coeffs.T
+        mu = self.mu
+        coeffs = self.coeffs.T
 
         # Generate the noise - depending on the structure of sigma_2, different sampling methods are used. E.g, if sigma_2 is a scalar, the noise is sampled from np.random.normal, which is faster than using np.random.multivariate_normal using a diagonal covariance matrix.
         if sigma_2 is None:
-            sigma_2 = self._sigma_2
+            sigma_2 = self.sigma_2
         e_t = generate_noise(sigma_2, burn_in + n, d)
         
         # Initialise the array to store the simulated time series data
@@ -251,12 +245,12 @@ class GNAR:
         if self._n is None:
             raise ValueError("The model was not fit.")
         # Compute the log determinant of the noise covariance matrix
-        if isinstance(self._sigma_2, (float, int)):
-            det = self._d * np.log(self._sigma_2)
-        elif self._sigma_2.ndim == 1 or self._sigma_2.shape[0] == 1:
-            det = np.sum(np.log(self._sigma_2))
+        if isinstance(self.sigma_2, (float, int)):
+            det = self._d * np.log(self.sigma_2)
+        elif self.sigma_2.ndim == 1 or self.sigma_2.shape[0] == 1:
+            det = np.sum(np.log(self.sigma_2))
         else:
-            det = np.log(np.linalg.det(self._sigma_2))
+            det = np.log(np.linalg.det(self.sigma_2))
         # Compute the number of parameters in the model
         if self._model_type == "global":
             k = self._p + np.sum(self._s)
@@ -278,12 +272,12 @@ class GNAR:
         if self._n is None:
             raise ValueError("The model was not fit.")
         # Compute the log determinant of the noise covariance matrix
-        if isinstance(self._sigma_2, (float, int)):
-            det = self._d * np.log(self._sigma_2)
-        elif self._sigma_2.ndim == 1 or self._sigma_2.shape[0] == 1:
-            det = np.sum(np.log(self._sigma_2))
+        if isinstance(self.sigma_2, (float, int)):
+            det = self._d * np.log(self.sigma_2)
+        elif self.sigma_2.ndim == 1 or self.sigma_2.shape[0] == 1:
+            det = np.sum(np.log(self.sigma_2))
         else:
-            det = np.log(np.linalg.det(self._sigma_2))
+            det = np.log(np.linalg.det(self.sigma_2))
         # Compute the number of parameters in the model
         if self._model_type == "global":
             k = self._p + np.sum(self._s)
@@ -294,24 +288,6 @@ class GNAR:
         # Compute the AIC
         return det + 2 * k / (self._n - self._p)
     
-    def get_coeffs(self):
-        """
-        Fetch the coefficients of the model.
-        """
-        return self._coeffs
-
-    def get_mean(self):
-        """
-        Fetch the means of the time series.
-        """
-        return self._mu
-
-    def get_cov(self):
-        """
-        Fetch the covariance matrix of the noise.
-        """
-        return self._sigma_2
-    
     def to_var(self):
         """
         Convert the GNAR model to VAR model format.
@@ -320,7 +296,7 @@ class GNAR:
             var (VAR): The VAR form of the GNAR model.
         """
         # Get coefficients
-        coefficients = self._coeffs
+        coefficients = self.coeffs
         var_coeffs = []
         seen = 0
         # Construct a matrix for each lag of the model
@@ -336,7 +312,7 @@ class GNAR:
         # Create a parameter DataFrame for the VAR model with the same column names as the GNAR model
         var_coeffs =  pd.DataFrame(np.vstack(var_coeffs), columns=self._names)
         # Return the VAR model
-        return VAR(p=self._p, coeffs=var_coeffs, mean=self._mu, sigma_2=self._sigma_2)
+        return VAR(p=self._p, coeffs=var_coeffs, mean=self.mu, sigma_2=self.sigma_2)
 
     def to_networkx(self):
         """
@@ -362,15 +338,15 @@ class GNAR:
         index = ["mean"] + [f"a_{i}" for i in range(1, self._p + 1)]
         for i in range(1, self._p + 1):
             index += [f"b_{i},{j}" for j in range(1, self._s[i - 1] + 1)]
-        parameters = pd.DataFrame(np.vstack([self._mu, self._coeffs]), columns=self._names, index=index)
+        parameters = pd.DataFrame(np.vstack([self.mu, self.coeffs]), columns=self._names, index=index)
         parameters.columns.name = "node"
         parameter_info = f"Parameters:\n{parameters}\n"
-        if isinstance(self._sigma_2, (int, float)):
-            cov = pd.DataFrame(self._sigma_2 * np.eye(self._d), index=self._names, columns=self._names)
-        elif isinstance(self._sigma_2, np.ndarray) and (self._sigma_2.ndim == 1 or self._sigma_2.shape[0] == 1):
-            cov =  pd.DataFrame(np.diag(self._sigma_2.flatten()), index=self._names, columns=self._names)
+        if isinstance(self.sigma_2, (int, float)):
+            cov = pd.DataFrame(self.sigma_2 * np.eye(self._d), index=self._names, columns=self._names)
+        elif isinstance(self.sigma_2, np.ndarray) and (self.sigma_2.ndim == 1 or self.sigma_2.shape[0] == 1):
+            cov =  pd.DataFrame(np.diag(self.sigma_2.flatten()), index=self._names, columns=self._names)
         else:
-            cov = pd.DataFrame(self._sigma_2, index=self._names, columns=self._names)
+            cov = pd.DataFrame(self.sigma_2, index=self._names, columns=self._names)
         cov.columns.name = "node"
         noise = f"Noise covariance matrix:\n{cov}\n"
         return model_info + graph_info + parameter_info + noise
