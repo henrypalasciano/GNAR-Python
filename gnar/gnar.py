@@ -123,10 +123,10 @@ class GNAR:
             self._names = np.arange(1, self._d + 1)
         # Compute the mean if necessary and save this to the parameter DataFrame
         if demean:
-            self.mu = mu = np.mean(ts, axis=0, keepdims=True)
+            self.mu = np.mean(ts, axis=0, keepdims=True)
+            ts = ts - self.mu
         else:
-            self.mu = mu = np.zeros((1, self._d))
-        ts -= mu
+            self.mu = np.zeros((1, self._d))
 
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (n, d, 1 + r), where r = max(s)
         data = np.zeros([self._n, self._d, 1 + np.max(self._s)])
@@ -154,18 +154,16 @@ class GNAR:
         if d != self._d:
             raise ValueError("The number of time series does not match the number of nodes in the model.")
 
-        # Get the mean and coefficients
-        mu = self.mu
-        coeffs = self.coeffs.T
-
-        # If the input is a DataFrame, create a DataFrame to store the predictions
+        # DataFrame handling
         is_df = isinstance(ts, pd.DataFrame)
         if is_df:
             columns = pd.MultiIndex.from_product([ts.columns, range(1, h + 1)], names=["Time Series", "Steps Ahead"])
             index = ts.index[self._p - 1:]
             ts = ts.to_numpy()
         
-        ts = ts - mu
+        # Remove the mean from the data and get the coefficients
+        ts = ts - self.mu
+        coeffs = self.coeffs.T
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (n, d, 1 + r)
         data = np.zeros([n, d, 1 + r])
         data[:, :, 0] = ts
@@ -185,7 +183,7 @@ class GNAR:
             # Compute the (i + 1) - step ahead predictions
             preds[:, :, i] = np.sum(X * coeffs, axis=2)
             
-        preds = preds + mu.reshape(1, d, 1)
+        preds = preds + self.mu.reshape(1, d, 1)
         # Return the predictions, adding the mean back to the data if necessary
         if is_df:
             return pd.DataFrame(preds.reshape(n - self._p + 1, d * h), index=index, columns=columns, dtype=float)
@@ -206,7 +204,6 @@ class GNAR:
         # Number of nodes and coefficients
         d = self._d
         r = np.max(self._s)
-        mu = self.mu
         coeffs = self.coeffs.T
 
         # Generate the noise - depending on the structure of sigma_2, different sampling methods are used. E.g, if sigma_2 is a scalar, the noise is sampled from np.random.normal, which is faster than using np.random.multivariate_normal using a diagonal covariance matrix.
@@ -232,7 +229,7 @@ class GNAR:
             X = shift_X(X, sim, ns, self._p, self._s)
 
         # Return the simulated time series data, adding the mean to the data
-        return ts_sim[burn_in:] + mu
+        return ts_sim[burn_in:] + self.mu
 
     def bic(self):
         """
@@ -244,13 +241,6 @@ class GNAR:
         # Compute the BIC only if the model was fitted using time series data
         if self._n is None:
             raise ValueError("The model was not fit.")
-        # Compute the log determinant of the noise covariance matrix
-        if isinstance(self.sigma_2, (float, int)):
-            det = self._d * np.log(self.sigma_2)
-        elif self.sigma_2.ndim == 1 or self.sigma_2.shape[0] == 1:
-            det = np.sum(np.log(self.sigma_2))
-        else:
-            det = np.log(np.linalg.det(self.sigma_2))
         # Compute the number of parameters in the model
         if self._model_type == "global":
             k = self._p + np.sum(self._s)
@@ -259,7 +249,7 @@ class GNAR:
         else:
             k = self._d * (self._p + np.sum(self._s))
         # Compute the BIC
-        return det + k * np.log(self._n - self._p) / (self._n - self._p)
+        return np.log(np.linalg.det(self.sigma_2)) + k * np.log(self._n - self._p) / (self._n - self._p)
 
     def aic(self):
         """
@@ -271,13 +261,6 @@ class GNAR:
         # Compute the AIC only if the model was fitted using time series data
         if self._n is None:
             raise ValueError("The model was not fit.")
-        # Compute the log determinant of the noise covariance matrix
-        if isinstance(self.sigma_2, (float, int)):
-            det = self._d * np.log(self.sigma_2)
-        elif self.sigma_2.ndim == 1 or self.sigma_2.shape[0] == 1:
-            det = np.sum(np.log(self.sigma_2))
-        else:
-            det = np.log(np.linalg.det(self.sigma_2))
         # Compute the number of parameters in the model
         if self._model_type == "global":
             k = self._p + np.sum(self._s)
@@ -286,7 +269,7 @@ class GNAR:
         else:
             k = self._d * (self._p + np.sum(self._s))
         # Compute the AIC
-        return det + 2 * k / (self._n - self._p)
+        return np.log(np.linalg.det(self.sigma_2)) + 2 * k / (self._n - self._p)
     
     def to_var(self):
         """
@@ -339,7 +322,7 @@ class GNAR:
         for i in range(1, self._p + 1):
             index += [f"b_{i},{j}" for j in range(1, self._s[i - 1] + 1)]
         parameters = pd.DataFrame(np.vstack([self.mu, self.coeffs]), columns=self._names, index=index)
-        parameters.columns.name = "node"
+        parameters.columns.name = "node"    
         parameter_info = f"Parameters:\n{parameters}\n"
         if isinstance(self.sigma_2, (int, float)):
             cov = pd.DataFrame(self.sigma_2 * np.eye(self._d), index=self._names, columns=self._names)
