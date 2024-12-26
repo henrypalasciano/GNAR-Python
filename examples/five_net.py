@@ -37,7 +37,8 @@ print("BIC: ", np.round(five_net_fit.bic(), 3))
 # Simulate from the true model and forecast the next 5 time points
 sim = pd.DataFrame(five_net.simulate(10), columns=["A", "B", "C", "D", "E"])
 preds = five_net.predict(sim, 5)
-# Since the input data is a pandas dataframe, the output is also a pandas dataframe with multi-index columns where the first level is the node and the second level is the horizon.
+# Since the input data is a pandas dataframe, the output is also a pandas
+# dataframe with multi-index columns where the first level is the node and the second level is the horizon.
 preds
 # %%
 # Convert the five-net GNAR model to a VAR model
