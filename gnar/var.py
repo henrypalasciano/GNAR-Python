@@ -2,10 +2,18 @@ import numpy as np
 import pandas as pd
 
 from gnar.utils.simulating import generate_noise
+from gnar.utils.data_utils import *
 
 class VAR:
     """
     Vector Autoregressive (VAR) model.
+
+    Parameters:
+        p (int): The number of lags.
+        ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of time series.
+        demean (bool): Whether to remove the mean from the data. Only used if ts is provided.
+        parameters (np.ndarray or pd.DataFrame): The parameters of the VAR model, consisting of the means and coefficients. Shape (1 + p * d, d).
+        sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the same variance is used for all time series. Only used if parameters is provided.
 
     Methods:
         fit: Fit the VAR model to the time series data.
@@ -15,16 +23,6 @@ class VAR:
         aic: Compute the Akaike Information Criterion (AIC) for the VAR model.
     """
     def __init__(self, p, ts=None, demean=True, coeffs=None, mean=1, sigma_2=1):
-        """
-        Initialise the VAR model.
-
-        Parameters:
-            p (int): The number of lags.
-            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of time series.
-            demean (bool): Whether to remove the mean from the data. Only used if ts is provided.
-            parameters (np.ndarray or pd.DataFrame): The parameters of the VAR model, consisting of the means and coefficients. Shape (1 + p * d, d).
-            sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the same variance is used for all time series. Only used if parameters is provided.
-        """
         # Initial checks
         if p < 1:
             raise ValueError("The number of lags p must be at least 1.")
@@ -55,22 +53,9 @@ class VAR:
             raise ValueError("The number of nodes in the adjacency matrix does not match the number of nodes in the coefficients matrix.")
         if k != self._p * self._d:
             raise ValueError("The number of coefficients does not match the number of parameters.")
-        # Store the mean
-        if isinstance(mean, (float, int)):
-            self.mu = np.repeat(mean, self._d).reshape(1, self._d)
-        elif isinstance(mean, np.ndarray):
-            self.mu = mean.reshape(1, self._d)
-        elif isinstance(mean, pd.DataFrame):
-            self.mu = mean.to_numpy().reshape(1, self._d)
-        else:
-            raise ValueError("Mean must be a float, int, NumPy array or Pandas DataFrame.")
-        # Store the noise covariance matrix
-        if isinstance(sigma_2, (float, int, np.ndarray)):
-            self.sigma_2 = sigma_2
-        elif isinstance(sigma_2, pd.DataFrame):
-            self.sigma_2 = sigma_2.to_numpy()
-        else:
-            raise ValueError("Noise covariance matrix must be a float, int, NumPy array or Pandas DataFrame.")
+        # Store the mean of the time series data and the covariance matrix of the noise
+        self.mu = set_mean(mean, self._d)
+        self.sigma_2 = set_cov(sigma_2)
     
     def fit(self, ts, demean):
         """
@@ -190,32 +175,26 @@ class VAR:
     def bic(self):
         """
         Compute the Bayesian Information Criterion (BIC) for the VAR model.
-
-        Returns:
-            bic (float): The Bayesian Information Criterion (BIC) for the VAR model.
         """
         # Compute the BIC only if the model was fitted using time series data
         if self._n is None:
             raise ValueError("The model was not fit.")
-        # Compute the number of parameters in the model
+        det = np.log(np.linalg.det(self.sigma_2))
         k = self._p * self._d * self._d
         # Compute the BIC
-        return np.log(np.linalg.det(self.sigma_2)) + k * np.log(self._n - self._p) / (self._n - self._p)
+        return det + k * np.log(self._n - self._p) / (self._n - self._p)
 
     def aic(self):
         """
         Compute the Akaike Information Criterion (AIC) for the GNAR model.
-
-        Returns:
-            aic (float): The Akaike Information Criterion (AIC) for the GNAR model.
         """
         # Compute the AIC only if the model was fitted using time series data
         if self._n is None:
             raise ValueError("The model was not fit.")
-        # Compute the number of parameters in the model
+        det = np.log(np.linalg.det(self.sigma_2))
         k = self._p * self._d * self._d
         # Compute the AIC
-        return np.log(np.linalg.det(self.sigma_2)) + 2 * k / (self._n - self._p)
+        return det + 2 * k / (self._n - self._p)
 
     def __str__(self):
         """
@@ -226,12 +205,6 @@ class VAR:
         parameters = pd.DataFrame(np.vstack([self.mu, self.coeffs]), columns=self._names, index=index)
         parameters.columns.name = "ts"
         parameter_info = f"Parameters:\n{parameters}\n"
-        if isinstance(self.sigma_2, (int, float)):
-            cov = pd.DataFrame(self.sigma_2 * np.eye(self._d), index=self._names, columns=self._names)
-        elif isinstance(self.sigma_2, np.ndarray) and (self.sigma_2.ndim == 1 or self.sigma_2.shape[0] == 1):
-            cov =  pd.DataFrame(np.diag(self.sigma_2.flatten()), index=self._names, columns=self._names)
-        else:
-            cov = pd.DataFrame(self.sigma_2, index=self._names, columns=self._names)
-        cov.columns.name = "ts"
+        cov = pd.DataFrame(cov_mat(self.sigma_2, self._d), index=self._names, columns=self._names)
         noise = f"Noise covariance matrix:\n{cov}\n"
         return model_info + parameter_info + noise

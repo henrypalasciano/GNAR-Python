@@ -5,12 +5,24 @@ import networkx as nx
 from gnar.utils.model_fitting import gnar_lr
 from gnar.utils.forecasting import format_X, update_X
 from gnar.utils.simulating import shift_X, generate_noise
-from gnar.utils.neighbour_sets import neighbour_set_mats, compute_neighbour_sums
+from gnar.utils.neighbour_sets import *
+from gnar.utils.data_utils import *
 from gnar.var import VAR
 
 class GNAR:
     """
     The GNAR model class for a d-dimensional mutivariate time series.
+
+    Parameters:
+        A (np.ndarray): The adjacency matrix of the graph.
+        p (int): The number of lags.
+        s (np.ndarray): An array containing the maximum stage of neighbour dependence for each lag.
+        model_type (str): The type of GNAR model. Either "global", "standard" or "local". Defaults to "standard".
+        ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
+        demean (bool): Whether to remove the mean from the data. Only required if ts is provided. Defaults to True.
+        coeffs (np.ndarray or pd.DataFrame): The parameters of the GNAR model, consisting of the mean and coefficients of each node. Shape (1 + p + sum(s), d).
+        mean (float, int, np.ndarray or pd.DataFrame): The mean of the time series data. If a float, the same mean is used for all nodes. Only required if parameters is provided. Defaults to 0.
+        sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the noise is assumed to have the same variance and be independent across nodes. Only required if parameters is provided. Defaults to 1.
 
     Methods:
         fit: Fit the GNAR model to time series data.
@@ -23,20 +35,6 @@ class GNAR:
         draw: Draw the graph using NetworkX.
     """
     def __init__(self, A, p, s, model_type="standard", ts=None, demean=True, coeffs=None, mean=0, sigma_2=1):
-        """
-        Initialise the GNAR model.
-
-        Parameters:
-            A (np.ndarray): The adjacency matrix of the graph.
-            p (int): The number of lags.
-            s (np.ndarray): An array containing the maximum stage of neighbour dependence for each lag.
-            model_type (str): The type of GNAR model. Either "global", "standard" or "local". Defaults to "standard".
-            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
-            demean (bool): Whether to remove the mean from the data. Only required if ts is provided. Defaults to True.
-            coeffs (np.ndarray or pd.DataFrame): The parameters of the GNAR model, consisting of the mean and coefficients of each node. Shape (1 + p + sum(s), d).
-            mean (float, int, np.ndarray or pd.DataFrame): The mean of the time series data. If a float, the same mean is used for all nodes. Only required if parameters is provided. Defaults to 0.
-            sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the noise is assumed to have the same variance and be independent across nodes. Only required if parameters is provided. Defaults to 1.
-        """
         # Initial checks
         if not isinstance(A, np.ndarray) or A.shape[0] != A.shape[1]:
             raise ValueError("Adjacency matrix A must be a square NumPy array.")
@@ -90,22 +88,9 @@ class GNAR:
             raise ValueError("The model type is global, but the coefficients are not the same for all nodes.")
         elif self._model_type == "standard" and np.any(unique_params[self._d * self._p:] != 1):
             raise ValueError("The model type is standard, but the beta coefficients are not the same for all nodes.")
-        # Store the mean
-        if isinstance(mean, (float, int)):
-            self.mu = np.repeat(mean, self._d).reshape(1, self._d)
-        elif isinstance(mean, np.ndarray):
-            self.mu = mean.reshape(1, self._d)
-        elif isinstance(mean, pd.DataFrame):
-            self.mu = mean.to_numpy().reshape(1, self._d)
-        else:
-            raise ValueError("Mean must be a float, int, NumPy array or Pandas DataFrame.")
-        # Store the noise covariance matrix
-        if isinstance(sigma_2, (float, int, np.ndarray)):
-            self.sigma_2 = sigma_2
-        elif isinstance(sigma_2, pd.DataFrame):
-            self.sigma_2 = sigma_2.to_numpy()
-        else:
-            raise ValueError("Noise covariance matrix must be a float, int, NumPy array or Pandas DataFrame.")
+        # Store the mean of the time series data and the covariance matrix of the noise
+        self.mu = set_mean(mean, self._d)
+        self.sigma_2 = set_cov(sigma_2)
 
     def fit(self, ts, demean=True):
         """
@@ -230,42 +215,34 @@ class GNAR:
     def bic(self):
         """
         Compute the Bayesian Information Criterion (BIC) for the GNAR model.
-
-        Returns:
-            bic (float): The Bayesian Information Criterion (BIC) for the GNAR model.
         """
         # Compute the BIC only if the model was fitted using time series data
         if self._n is None:
             raise ValueError("The model was not fit.")
-        # Compute the number of parameters in the model
-        if self._model_type == "global":
-            k = self._p + np.sum(self._s)
-        elif self._model_type == "standard":
-            k = self._d * self._p + np.sum(self._s)
-        else:
-            k = self._d * (self._p + np.sum(self._s))
+        det = np.log(np.linalg.det(self.sigma_2))
+        k = self._num_params()
         # Compute the BIC
-        return np.log(np.linalg.det(self.sigma_2)) + k * np.log(self._n - self._p) / (self._n - self._p)
+        return det + k * np.log(self._n - self._p) / (self._n - self._p)
 
     def aic(self):
         """
         Compute the Akaike Information Criterion (AIC) for the GNAR model.
-
-        Returns:
-            aic (float): The Akaike Information Criterion (AIC) for the GNAR model.
         """
         # Compute the AIC only if the model was fitted using time series data
         if self._n is None:
             raise ValueError("The model was not fit.")
+        det = np.log(np.linalg.det(self.sigma_2))
+        k = self.num_params()
+        # Compute the AIC
+        return det + 2 * k / (self._n - self._p)
+    
+    def _num_params(self):
         # Compute the number of parameters in the model
         if self._model_type == "global":
-            k = self._p + np.sum(self._s)
+            return self._p + np.sum(self._s)
         elif self._model_type == "standard":
-            k = self._d * self._p + np.sum(self._s)
-        else:
-            k = self._d * (self._p + np.sum(self._s))
-        # Compute the AIC
-        return np.log(np.linalg.det(self.sigma_2)) + 2 * k / (self._n - self._p)
+            return self._d * self._p + np.sum(self._s)
+        return self._d * (self._p + np.sum(self._s))
     
     def to_var(self):
         """
@@ -317,15 +294,8 @@ class GNAR:
         index = ["mean"] + [f"a_{i}" for i in range(1, self._p + 1)]
         for i in range(1, self._p + 1):
             index += [f"b_{i},{j}" for j in range(1, self._s[i - 1] + 1)]
-        parameters = pd.DataFrame(np.vstack([self.mu, self.coeffs]), columns=self._names, index=index)
-        parameters.columns.name = "node"    
+        parameters = pd.DataFrame(np.vstack([self.mu, self.coeffs]), columns=self._names, index=index)   
         parameter_info = f"Parameters:\n{parameters}\n"
-        if isinstance(self.sigma_2, (int, float)):
-            cov = pd.DataFrame(self.sigma_2 * np.eye(self._d), index=self._names, columns=self._names)
-        elif isinstance(self.sigma_2, np.ndarray) and (self.sigma_2.ndim == 1 or self.sigma_2.shape[0] == 1):
-            cov =  pd.DataFrame(np.diag(self.sigma_2.flatten()), index=self._names, columns=self._names)
-        else:
-            cov = pd.DataFrame(self.sigma_2, index=self._names, columns=self._names)
-        cov.columns.name = "node"
+        cov = pd.DataFrame(cov_mat(self.sigma_2, self._d), index=self._names, columns=self._names)
         noise = f"Noise covariance matrix:\n{cov}\n"
         return model_info + graph_info + parameter_info + noise
