@@ -5,7 +5,7 @@ import networkx as nx
 from gnar.utils.model_fitting import gnar_lr
 from gnar.utils.forecasting import format_X, update_X
 from gnar.utils.simulating import shift_X, generate_noise
-from gnar.utils.neighbour_sets import neighbour_set_mats
+from gnar.utils.neighbour_sets import neighbour_set_mats, compute_neighbour_sums
 from gnar.var import VAR
 
 class GNAR:
@@ -129,9 +129,7 @@ class GNAR:
             self.mu = np.zeros((1, self._d))
 
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (n, d, 1 + r), where r = max(s)
-        data = np.zeros([self._n, self._d, 1 + np.max(self._s)])
-        data[:, :, 0] = ts
-        data[:, :, 1:] = np.transpose(ts @ self._ns_mats, (1, 2, 0))
+        data = compute_neighbour_sums(ts, self._ns_mats, np.max(self._s))
         # Fit the model using least squares linear regression
         coeffs, sigma_2 = gnar_lr(data, self._p, self._s, self._model_type)
         self.coeffs = coeffs.T
@@ -165,9 +163,7 @@ class GNAR:
         ts = ts - self.mu
         coeffs = self.coeffs.T
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (n, d, 1 + r)
-        data = np.zeros([n, d, 1 + r])
-        data[:, :, 0] = ts
-        data[:, :, 1:] = np.transpose(ts @ self._ns_mats, (1, 2, 0))
+        data = compute_neighbour_sums(ts, self._ns_mats, r)
         # Format the data to make predictions. The laggad values array contains lags for the time series and neighbour sums up to the maximum neighbour stage of dependence. This is an array of shape (n - p + 1, d, p * (1 + r)), which is required for updating X.
         X, lagged_vals = format_X(data, self._p, self._s)
 
