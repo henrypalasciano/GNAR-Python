@@ -224,7 +224,7 @@ class GNAR:
         if self._n is None:
             raise ValueError("The model was not fit.")
         det = np.log(np.linalg.det(self.sigma_2))
-        k = self.num_params()
+        k = self._num_params()
         # Compute the AIC
         return det + 2 * k / (self._n - self._p)
     

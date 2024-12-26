@@ -11,7 +11,7 @@ A = np.array([[0, 1, 0],
               [1, 0, 1],
               [0, 1, 0]])
 # Fit a GNAR model
-G = GNAR(A, p=2, s=np.array([1, 1]), ts=ts, remove_mean=True, model_type="standard")
+G = GNAR(A, p=2, s=np.array([1, 1]), ts=ts, demean=True, model_type="standard")
 print(G)
 # %%
 # BIC and AIC
