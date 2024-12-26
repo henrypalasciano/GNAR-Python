@@ -62,8 +62,9 @@ class GNAR:
             self.fit(ts.copy(), demean)
         elif coeffs is not None:
             # If the parameters are provided, set up using these
+            self._d = A.shape[0]
+            self._n = None 
             self._parameter_setup(coeffs, mean, sigma_2)    
-            self._n = None    
         else:
             raise ValueError("Either the input time series data or the model parameters are required.")
 
@@ -78,7 +79,6 @@ class GNAR:
         else:
             raise ValueError("Coefficients must be a NumPy array or a Pandas DataFrame.")
         # Check the dimensions and structure of the coefficients matrix
-        self._d = A.shape[0]
         check_gnar_coeffs(self.coeffs, self._d, self._p, self._s, self._model_type)
         # Store the mean of the time series data and the covariance matrix of the noise
         self.mu = set_mean(mean, self._d)

@@ -11,14 +11,13 @@ A = np.array([[0, 0, 0, 1, 1],
               [1, 1, 1, 0, 0],
               [1, 0, 0, 0, 0]])
 # Parameters of the GNAR model - first row is the mean, followed by the alpha and beta coefficients. The columns are all equal since the GNAR model is global.
-params = np.array([[0, 0, 0, 0, 0], 
-                   [0.2, 0.2, 0.2, 0.2, 0.2], 
+coeffs = np.array([[0.2, 0.2, 0.2, 0.2, 0.2], 
                    [0.2, 0.2, 0.2, 0.2, 0.2],
                    [0.5, 0.5, 0.5, 0.5, 0.5],
                    [-0.1, -0.1, -0.1, -0.1, -0.1]])
 # Convert the parameters to a pandas dataframe, so that the GNAR model stores the time series names
-params_df = pd.DataFrame(params, columns=["A", "B", "C", "D", "E"], index=["mean", "a_1", "a_2", "b_1,1", "b_2,1"]) 
-five_net = GNAR(A, p=2, s=np.array([1, 1]), parameters=params_df, sigma_2=1, model_type="global")
+coeffs_df = pd.DataFrame(coeffs, columns=["A", "B", "C", "D", "E"]) 
+five_net = GNAR(A=A, p=2, s=np.array([1, 1]), coeffs=coeffs_df, mean=0, sigma_2=1, model_type="global")
 print(five_net)
 # %%
 # Draw the network

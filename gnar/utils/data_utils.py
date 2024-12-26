@@ -27,8 +27,8 @@ def cov_mat(sigma_2, d):
     return sigma_2
 
 def check_gnar_coeffs(coeffs, d, p, s, model_type):
-    k, d = np.shape(coeffs)
-    if d != A.shape[0]:
+    k, q = np.shape(coeffs)
+    if d != q:
         raise ValueError("The number of nodes in the adjacency matrix does not match the number of nodes in the coefficients matrix.")
     if k != p + np.sum(s):
         raise ValueError("The number of coefficients does not match the number of parameters.")
