@@ -33,6 +33,7 @@ class VAR:
             self.fit(ts.copy(), demean)
         elif coeffs is not None:
             # If the parameters are provided, set up using these
+            self._ts = None
             self._parameter_setup(coeffs, mean, sigma_2)        
         else:
             raise ValueError("Either the input time series data or the model parameters are required.")
@@ -64,6 +65,7 @@ class VAR:
             demean (bool): Whether to remove the mean from the data.
         """
         self._n, self._d = n, d = np.shape(ts)
+        self._ts = ts
         if isinstance(ts, pd.DataFrame):
             self._names = ts.columns
             ts = ts.to_numpy()
@@ -90,12 +92,12 @@ class VAR:
         res = X @ self.coeffs - y
         self.sigma_2 = res.T @ res / (n - self._p)
         
-    def predict(self, ts, h=1):
+    def predict(self, ts=None, h=1):
         """
         Forecast future values of an input time series using the VAR model.
 
         Parameters:
-            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
+            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes. If None, the model the forecasts from the last observation used in fitting.
             h (int): The number of steps ahead to forecast.
 
         Returns:
@@ -104,6 +106,11 @@ class VAR:
                                                 if a pandas DataFrame. In the latter case we are assuming that one computes forecasts from each available
                                                 time point, which may be useful when evaluating the performance of a model out-of-sample for example.
         """
+        if ts is None:
+            if self._n is None:
+                raise ValueError("The model was not fit.")
+            # Last p observations used in fitting
+            ts = self._ts[-self._p:]
         n, d = np.shape(ts)
         if d != self._d:
             raise ValueError("The number of time series does not match the number of time series in the model.")

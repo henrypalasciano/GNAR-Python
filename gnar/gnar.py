@@ -64,6 +64,7 @@ class GNAR:
             # If the parameters are provided, set up using these
             self._d = A.shape[0]
             self._n = None 
+            self._ts = None
             self._parameter_setup(coeffs, mean, sigma_2)    
         else:
             raise ValueError("Either the input time series data or the model parameters are required.")
@@ -93,6 +94,7 @@ class GNAR:
             demean (bool): Whether to remove the mean from the data.
         """
         self._n, self._d = np.shape(ts)
+        self._ts = ts
         if isinstance(ts, pd.DataFrame):
             self._names = ts.columns
             ts = ts.to_numpy()
@@ -112,12 +114,12 @@ class GNAR:
         self.coeffs = coeffs.T
         self.sigma_2 = sigma_2
 
-    def predict(self, ts, h=1):
+    def predict(self, ts=None, h=1):
         """
         Forecast future values of an input time series using the GNAR model.
 
         Parameters:
-            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
+            ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes. If None, the model the forecasts from the last observation used in fitting.
             h (int): The number of steps ahead to forecast.
 
         Returns:
@@ -126,6 +128,11 @@ class GNAR:
                                                 if a pandas DataFrame. In the latter case we are assuming that one computes forecasts from each available
                                                 time point, which may be useful when evaluating the performance of a model out-of-sample for example.
         """
+        if ts is None:
+            if self._n is None:
+                raise ValueError("The model was not fit.")
+            # Last p observations used in fitting
+            ts = self._ts[-self._p:]
         # Data shapes
         n, d = ts.shape
         r = np.max(self._s)
