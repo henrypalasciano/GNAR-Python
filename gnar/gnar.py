@@ -121,18 +121,23 @@ class GNAR:
             h (int): The number of steps ahead to forecast.
 
         Returns:
-            preds (np.ndarray or pd.DataFrame): The predicted values. Shape (n + p - 1, d, h) if numpy array, or (n + p - 1, d * h) if DataFrame.
+            preds (np.ndarray or pd.DataFrame): The predicted values. If the shape of the input is (p, d), the shape of the output is always (h, d). If 
+                                                the shape is (n, d) for some n > p, the output is (n - p + 1, d, h) if a numpy array, or (n - p + 1, d * h) 
+                                                if a pandas DataFrame. In the latter case we are assuming that one computes forecasts from each available
+                                                time point, which may be useful when evaluating the performance of a model out-of-sample for example.
         """
         # Data shapes
         n, d = ts.shape
         r = np.max(self._s)
         if d != self._d:
             raise ValueError("The number of time series does not match the number of nodes in the model.")
+        if n < self._p:
+            raise ValueError("The number of observations is insufficient for forecasting.")
 
         # DataFrame handling
         is_df = isinstance(ts, pd.DataFrame)
         if is_df:
-            columns = pd.MultiIndex.from_product([ts.columns, range(1, h + 1)], names=["Time Series", "Steps Ahead"])
+            names = ts.columns
             index = ts.index[self._p - 1:]
             ts = ts.to_numpy()
         
@@ -157,8 +162,12 @@ class GNAR:
             preds[:, :, i] = np.sum(X * coeffs, axis=2)
             
         preds = preds + self.mu.reshape(1, d, 1)
-        # Return the predictions, adding the mean back to the data if necessary
+        if n == self._p:
+            if is_df:
+                return pd.DataFrame(preds[0].T, index=range(1, h + 1), columns=names, dtype=float)
+            return preds[0].T
         if is_df:
+            columns = pd.MultiIndex.from_product([names, [f"h = {i}" for i in range(1, h + 1)]])
             return pd.DataFrame(preds.reshape(n - self._p + 1, d * h), index=index, columns=columns, dtype=float)
         return preds
 
