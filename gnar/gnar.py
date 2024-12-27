@@ -36,19 +36,7 @@ class GNAR:
     """
     def __init__(self, A, p, s, model_type="standard", ts=None, demean=True, coeffs=None, mean=0, sigma_2=1):
         # Initial checks
-        if not isinstance(A, np.ndarray) or A.shape[0] != A.shape[1]:
-            raise ValueError("Adjacency matrix A must be a square NumPy array.")
-        if np.any(A < 0):
-            raise ValueError("Adjacency matrix A must have non-negative weights.")
-        if p < 1:
-            raise ValueError("The number of lags p must be at least 1.")
-        if not isinstance(s, np.ndarray) or len(s) != p:
-            raise ValueError("Array s must be a NumPy array with length equal to p (number of lags).")
-        if np.any(s < 0):
-            raise ValueError("Values in s must be non-negative integers.")
-        valid_model_types = {"global", "standard", "local"}
-        if model_type not in valid_model_types:
-            raise ValueError(f"Invalid model_type. Expected one of {valid_model_types}, got '{model_type}'.")
+        gnar_checks(A, p, s, model_type)
 
         self._A = A
         self._p = p
