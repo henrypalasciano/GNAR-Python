@@ -10,6 +10,9 @@ GNAR processes are a class of autoregressive models that describe the behavior o
 - In standard (or local - $\alpha$) models, only the $\beta$ (neighbour set) coefficients are shared whereas the $\alpha$ ( autoregressive coefficients) is node specific.  
 - In local - $\alpha\beta$ models, all parameters are node specific.  
 
+**Note:** The current implementation **only supports unweighted networks**.  
+**Support for weighted graphs will be added in a future update.**
+
 ---
 
 ## Installation  
