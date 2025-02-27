@@ -4,7 +4,13 @@ This repository provides a **Python implementation** of the **Generalised Networ
 as described in the paper:  
 📄 **[Generalized Network Autoregressive Processes and the GNAR Package](https://doi.org/10.18637/jss.v096.i05)**  
 
-GNAR processes are a class of autoregressive models which describe the behaviour of multivariate time series on graphs.
+GNAR processes are a class of autoregressive models which describe the behaviour of multivariate time series on graphs.  
+Each univariate time series represents a node on the graph, with information flowing between these via the edges.  
+The graph imposes additional constraints on the parameters of the GNAR process, depending on the model class.
+
+- In **global-$\alpha$** models, all parameters are shared between nodes.  
+- In **standard (or local-$\alpha$) models**, only the $\beta$ (neighbour set) coefficients are shared whereas the $\alpha$ (the autoregressive component) is node specific.  
+- In **local-$\alpha\beta$** models, all parameters are node specific.  
 
 ---
 
@@ -108,7 +114,7 @@ and Python implementation:
   title = {{GNAR Python}: A Python implementation of Generalised Network Autoregressive Processes},
   year = {2024},
   url = {https://github.com/henrypalasciano/GNAR-Python},
-  version = {1.0},
+  version = {1.0}
 }
 ```
 
