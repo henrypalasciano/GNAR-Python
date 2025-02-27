@@ -1,8 +1,8 @@
-# GNAR-Python: A Python implementation of Generalised Network Autoregressive Processes
+# GNAR Python: A Python implementation of Generalised Network Autoregressive Processes
 
 This repository provides a **Python implementation** of the **Generalised Network Autoregressive (GNAR) model**,  
 as described in the paper:  
-📄 **[GNAR: Generalised Network Autoregressive Models](https://doi.org/10.18637/jss.v096.i05)**  
+📄 **[Generalized Network Autoregressive Processes and the GNAR Package](https://doi.org/10.18637/jss.v096.i05)**  
 
 GNAR processes are a class of autoregressive models which describe the behaviour of multivariate time series on graphs.
 
@@ -24,7 +24,27 @@ Alternatively, install directly from GitHub:
 pip install git+https://github.com/henrypalasciano/GNAR-Python.git
 ```
 
+---
 
+## Usage
+
+
+
+---
+
+## 📂 Repository Structure  
+
+The repository is organised as follows:
+
+```plaintext
+📂 GNAR-Python/
+ ┣ 📂 gnar/            # Core GNAR model implementation
+ ┣ 📂 examples/        # Example scripts demonstrating GNAR usage
+ ┣ 📂 tests/           # Unit tests for model validation
+ ┣ 📜 README.md        # Project documentation
+ ┣ 📜 requirements.txt # List of dependencies
+ ┣ 📜 setup.py         # Installation setup file
+```
 
 ---
 
@@ -51,10 +71,17 @@ and Python implementation
 ```bibtex
 @software{GNAR-Python,
   author = {Henry Antonio Palasciano},
-  title = {{GNAR-Python}: A Python implementation of Generalised Network Autoregressive Processes},
+  title = {{GNAR Python}: A Python implementation of Generalised Network Autoregressive Processes},
   year = {2024},
   url = {https://github.com/henrypalasciano/GNAR-Python},
   version = {1.0},
 }
 ```
+
+---
+
+## Contact  
+
+**Henry Antonio Palasciano**  
+📧 Email: [henry.palasciano17@imperial.ac.uk](mailto:henry.palasciano17@imperial.ac.uk)
 
