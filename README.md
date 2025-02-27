@@ -100,7 +100,7 @@ If you use **GNAR-Python** in your research, please cite the following paper:
 }
 ```
 
-and Python implementation
+and Python implementation:
 
 ```bibtex
 @software{GNAR-Python,
