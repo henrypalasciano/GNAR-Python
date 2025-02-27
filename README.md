@@ -26,9 +26,43 @@ pip install git+https://github.com/henrypalasciano/GNAR-Python.git
 
 ---
 
-## Usage
+## 📖 Example Usage  
 
+Below is a simple example of how to use the **GNAR-Python** package to fit a Generalised Network Autoregressive (GNAR) model, generate forecasts, and simulate data.
 
+```python
+import numpy as np
+from gnar.gnar import GNAR
+
+# Generate synthetic time series data (100 time steps, 3 nodes)
+ts = np.random.normal(0, 1, (100, 3))
+
+# Define an adjacency matrix for the network
+A = np.array([[0, 1, 0], 
+              [1, 0, 1],
+              [0, 1, 0]])
+
+# Fit a standard GNAR(2,[1,1]) process to the time series data
+G = GNAR(A, p=2, s=np.array([1, 1]), ts=ts, demean=True, model_type="standard")
+print(G)
+
+# Compute model selection criteria
+print("BIC:", G.bic())
+print("AIC:", G.aic())
+
+# Simulate 100 time steps from the fitted GNAR model
+simulated_data = G.simulate(100)
+
+# Forecast the next 5 time steps from some time series data (here h is the forecast horizon)
+ts = np.random.normal(0, 1, (10, 3))
+predictions = G.predict(ts=ts, h=5)
+
+# Alternatively forecast directly from the last observation of the multivariate time series the model was fit to
+predictions = G.predict(h=5)
+
+# Visualise the graph
+G.draw()
+```
 
 ---
 
@@ -70,7 +104,7 @@ and Python implementation
 
 ```bibtex
 @software{GNAR-Python,
-  author = {Henry Antonio Palasciano},
+  author = {Palasciano, H. A.},
   title = {{GNAR Python}: A Python implementation of Generalised Network Autoregressive Processes},
   year = {2024},
   url = {https://github.com/henrypalasciano/GNAR-Python},
