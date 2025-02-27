@@ -7,7 +7,7 @@ as described in the paper:
 GNAR processes are a class of autoregressive models that describe the behavior of **multivariate time series on graphs**. Each univariate time series represents a **node** on the graph, with information flowing between them via the **edges**. The graph imposes additional constraints on the parameters of the GNAR process, depending on the model class.  
 
 - In global-$\alpha$ models, all parameters are shared between nodes.  
-- In standard (or local-$\alpha$) models, only the $\beta$ (neighbour set) coefficients are shared whereas the $\alpha$ ( autoregressive coefficients) is node specific.  
+- In standard (or local- $\alpha$) models, only the $\beta$ (neighbour set) coefficients are shared whereas the $\alpha$ ( autoregressive coefficients) is node specific.  
 - In local-$\alpha\beta$ models, all parameters are node specific.  
 
 ---
