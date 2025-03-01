@@ -43,7 +43,10 @@ class GNAR:
         self._s = s
         self._model_type = model_type
         # Compute the neighbour set matrices up to the maximum stage of neighbour dependence
-        self._ns_mats = neighbour_set_mats(A, np.max(s))
+        if np.all((A == 0) | (A == 1)):
+            self._ns_mats = neighbour_set_mats(A, np.max(s))
+        else:
+            raise ValueError("Weighted matrices not supported yet.")
 
         if ts is not None:
             # If a time series is provided, fit the model to the data, removing the mean if necessary
