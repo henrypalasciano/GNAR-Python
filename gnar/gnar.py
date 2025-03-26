@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
-from gnar.utils.model_fitting import gnar_lr
+from gnar.utils.gnar_linear_regression import gnar_lr
 from gnar.utils.forecasting import format_X, update_X
 from gnar.utils.simulating import shift_X, generate_noise
 from gnar.utils.neighbour_sets import *
