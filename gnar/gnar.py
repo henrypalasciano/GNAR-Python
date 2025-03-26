@@ -211,6 +211,15 @@ class GNAR:
         # Return the simulated time series data, adding the mean to the data
         return ts_sim[burn_in:] + self.mu
 
+    def compute_autocov_mats(self, max_lag=None):
+        """
+        Compute the autocovariance matrices for the GNAR model up to a maximum lag. Output shape: (max_lag + 1, d, d) from lag 0 to lag max_lag
+        """
+        # Convert to a VAR
+        var = self.to_var()
+        # Compute the autocovariance matrices
+        return var.compute_autocov_mats(max_lag=max_lag)
+
     def bic(self):
         """
         Compute the Bayesian Information Criterion (BIC) for the GNAR model.

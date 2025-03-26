@@ -22,7 +22,7 @@ class VAR:
         bic: Compute the Bayesian Information Criterion (BIC).
         aic: Compute the Akaike Information Criterion (AIC).
     """
-    def __init__(self, p, ts=None, demean=True, coeffs=None, mean=1, sigma_2=1):
+    def __init__(self, p, ts=None, demean=True, coeffs=None, mean=0, sigma_2=1):
         # Initial checks
         if p < 1:
             raise ValueError("The number of lags p must be at least 1.")
@@ -185,6 +185,43 @@ class VAR:
                 X = np.hstack([sim, X[:-self._d]])
         # Return the simulated time series data, adding the mean to the data
         return ts_sim[burn_in:] + self.mu
+    
+    def companion_form(self):
+        """
+        Return the companion form of the VAR model. 
+        """
+        # If the model is of order 1, then it is already in companion form
+        if self._p == 1:
+            return self.coeffs.T, self.sigma_2
+        # The lower part of the coefficient matrix is just zeros and ones
+        lower = np.hstack([np.eye(self._d * (self._p - 1)), np.zeros((self._d * (self._p - 1), self._d))])
+        # The upper part of the coefficient matrix is constructed by stacking the coefficient matrices of each lag together
+        # (the coefficients are saved so that each lag's coefficient matrix is stacked on top of each other)
+        phi = np.vstack([self.coeffs.T, lower])
+        # Construct the noise covariance matrix for the VAR process in companion form
+        sigma_2 = np.zeros((self._p * self._d, self._p * self._d))
+        sigma_2[:self._d, :self._d] = cov_mat(self.sigma_2, self._d)
+        return phi, sigma_2
+
+    def compute_autocov_mats(self, max_lag=None):
+        """
+        Compute the autocovariance matrices for the VAR model up to a maximum lag. Output shape: (max_lag + 1, d, d) from lag 0 to lag max_lag
+        """
+        # Set max lag to be the maximum lag
+        if max_lag is None:
+            max_lag = self._p
+        phi, sigma_2 = self.companion_form()
+        d = self._d * self._p
+        # Autocovariance matrices are stacked horizontally in the order Gamma(0), ..., Gamma(p-1)
+        autocovs = (np.linalg.inv(np.eye(d ** 2) - np.kron(phi, phi)) @ sigma_2.flatten()).reshape(d, d)[:self._d]
+        # Format the first p autocovariance matrices. Shape: (p, d, d). Order: Gamma_0, ..., Gamma_{p-1}
+        autocovs =  autocovs.T.reshape(self._p, self._d, self._d).transpose(0, 2, 1)
+        # Format the coefficients to compute the remaining autocovariance matrices. Shape: (p, d, d). Order: Phi_p, ..., Phi_1
+        coeffs = self.coeffs.reshape(self._p, self._d, self._d).transpose(0, 2, 1)[::-1]
+        for tau in range(max_lag - self._p + 1):
+            # Compute the lag tau autocovariance matrix and stack it to the rest
+            autocovs = np.vstack([autocovs, np.sum(coeffs @ autocovs[-self._p:], axis=0).reshape(1, self._d, self._d)])
+        return autocovs
 
     def bic(self):
         """
