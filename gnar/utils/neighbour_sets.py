@@ -46,3 +46,23 @@ def compute_neighbour_sums(ts, ns_mats, r):
     data[:, :, 0] = ts
     data[:, :, 1:] = np.transpose(ts @ ns_mats, (1, 2, 0))
     return data
+
+def var_coeff_maps(ns_mats, p, s, d):
+    """
+    Construct the matrices for mapping the gnar coefficients to var form. Also useful for the Yule-Walker equations.
+
+    Params:
+        ns_mats: np.array. Tensor of powers of the adjacency matrix. Shape (r, n, n)
+        p: int. Number of lags
+        s: np.array. Maximum stage of neighbour dependence for each lag. Shape (p,)
+    
+    Returns:
+        np.array. Mapping matrices. Shape (d, p * d, p + sum(s))
+    """
+    W = np.zeros([d, p * d, p + np.sum(s)])
+    w = np.vstack([np.eye(d).reshape(1, d, d), ns_mats]).transpose(2, 1, 0)
+    s_tau = 0
+    for i in range(p):
+        W[:, i * d : (i + 1) * d, s_tau : s_tau + s[i] + 1] = w[:, :, :1 + s[i]]
+        s_tau += s[i] + 1
+    return W

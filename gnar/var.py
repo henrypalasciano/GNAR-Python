@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import warnings
 
 from gnar.utils.simulating import generate_noise
 from gnar.utils.data_utils import *
@@ -55,6 +56,9 @@ class VAR:
         # Store the mean of the time series data and the covariance matrix of the noise
         self.mu = set_mean(mean, self._d)
         self.sigma_2 = set_cov(sigma_2)
+        # Check whether the process is stationary
+        if not self.is_stationary():
+            warnings.warn("The VAR model is non-stationary based on the provided parameters!", UserWarning)
     
     def fit(self, ts, demean):
         """
@@ -186,13 +190,23 @@ class VAR:
         # Return the simulated time series data, adding the mean to the data
         return ts_sim[burn_in:] + self.mu
     
+    def is_stationary(self):
+        """
+        Check if the VAR model is stationary by computing the eigenvalues of the companion form.
+        """
+        phi, sigma_2 = self.companion_form()
+        # Compute the eigenvalues of the companion form
+        eigs = np.linalg.eigvals(phi)
+        # Check if all eigenvalues are inside the unit circle
+        return np.all(np.abs(eigs) < 1)
+    
     def companion_form(self):
         """
         Return the companion form of the VAR model. 
         """
         # If the model is of order 1, then it is already in companion form
         if self._p == 1:
-            return self.coeffs.T, self.sigma_2
+            return self.coeffs.T, cov_mat(self.sigma_2, self._d)
         # The lower part of the coefficient matrix is just zeros and ones
         lower = np.hstack([np.eye(self._d * (self._p - 1)), np.zeros((self._d * (self._p - 1), self._d))])
         # The upper part of the coefficient matrix is constructed by stacking the coefficient matrices of each lag together
@@ -222,6 +236,17 @@ class VAR:
             # Compute the lag tau autocovariance matrix and stack it to the rest
             autocovs = np.vstack([autocovs, np.sum(coeffs @ autocovs[-self._p:], axis=0).reshape(1, self._d, self._d)])
         return autocovs
+
+    def compute_autocorr_mats(self, max_lag=None):
+        """
+        Compute the autocorrelation matrices for the VAR model up to a maximum lag. Output shape: (max_lag + 1, d, d) from lag 0 to lag max_lag
+        """
+        # Set max lag to be the maximum lag
+        autocovs = self.compute_autocov_mats(max_lag)
+        # Compute diagonal matrix containing the inverses of the standard deviations of each series
+        D = np.diag(np.diag(autocovs[0]) ** -0.5)
+        # Compute the autocorrelation matrices 
+        return D @ autocovs @ D
 
     def bic(self):
         """

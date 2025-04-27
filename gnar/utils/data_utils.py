@@ -54,3 +54,15 @@ def check_gnar_coeffs(coeffs, d, p, s, model_type):
     elif model_type == "standard" and np.any(unique_params[d * p:] != 1):
         raise ValueError("The model type is standard, but the beta coefficients are not the same for all nodes.")
     return None
+
+def param_reorder(coeffs, p, s):
+    """
+    Reorder the coefficients to match the structure of the weight matrices.
+    """
+    order = []
+    s_tau = 0
+    for i in range(p):
+        order.append(i)
+        order += list(range(p + s_tau, p + s_tau + s[i]))
+        s_tau += s[i]
+    return coeffs[order]

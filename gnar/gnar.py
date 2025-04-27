@@ -3,6 +3,7 @@ import pandas as pd
 import networkx as nx
 
 from gnar.utils.gnar_linear_regression import gnar_lr
+from gnar.utils.gnar_yule_walker import gnar_yw, estimate_covariance_mats, estimate_res_mat
 from gnar.utils.forecasting import format_X, update_X
 from gnar.utils.simulating import shift_X, generate_noise
 from gnar.utils.neighbour_sets import *
@@ -20,6 +21,7 @@ class GNAR:
         model_type (str): The type of GNAR model. Either "global", "standard" or "local". Defaults to "standard".
         ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
         demean (bool): Whether to remove the mean from the data. Only required if ts is provided. Defaults to True.
+        method (str): The method used to fit the model. Either "OLS" or "YW". Defaults to "OLS".
         coeffs (np.ndarray or pd.DataFrame): The parameters of the GNAR model, consisting of the mean and coefficients of each node. Shape (1 + p + sum(s), d).
         mean (float, int, np.ndarray or pd.DataFrame): The mean of the time series data. If a float, the same mean is used for all nodes. Only required if parameters is provided. Defaults to 0.
         sigma_2 (float, int, np.ndarray or pd.DataFrame): The variance or covariance of the noise. If a float, the noise is assumed to have the same variance and be independent across nodes. Only required if parameters is provided. Defaults to 1.
@@ -34,7 +36,7 @@ class GNAR:
         to_networkx: Convert the adjacency matrix to a NetworkX graph. 
         draw: Draw the graph using NetworkX.
     """
-    def __init__(self, A, p, s, model_type="standard", ts=None, demean=True, coeffs=None, mean=0, sigma_2=1):
+    def __init__(self, A, p, s, model_type="standard", ts=None, demean=True, method="OLS", coeffs=None, mean=0, sigma_2=1):
         # Initial checks
         gnar_checks(A, p, s, model_type)
 
@@ -50,7 +52,7 @@ class GNAR:
 
         if ts is not None:
             # If a time series is provided, fit the model to the data, removing the mean if necessary
-            self.fit(ts.copy(), demean)
+            self.fit(ts.copy(), demean, method)
         elif coeffs is not None:
             # If the parameters are provided, set up using these
             self._d = A.shape[0]
@@ -76,7 +78,7 @@ class GNAR:
         self.mu = set_mean(mean, self._d)
         self.sigma_2 = set_cov(sigma_2)
 
-    def fit(self, ts, demean=True):
+    def fit(self, ts, demean=True, method="OLS"):
         """
         Fit the GNAR model to the time series data.
 
@@ -100,10 +102,23 @@ class GNAR:
 
         # Compute the neighbour sums up to the maximum stage of neighbour dependence. This is an array of shape (n, d, 1 + r), where r = max(s)
         data = compute_neighbour_sums(ts, self._ns_mats, np.max(self._s))
-        # Fit the model using least squares linear regression
-        coeffs, sigma_2 = gnar_lr(data, self._p, self._s, self._model_type)
-        self.coeffs = coeffs.T
-        self.sigma_2 = sigma_2
+
+        if method == "OLS":
+            # Fit the model using least squares linear regression
+            coeffs, sigma_2 = gnar_lr(data, self._p, self._s, self._model_type)
+            self.coeffs = coeffs.T
+            self.sigma_2 = sigma_2
+        elif method == "YW":
+            # Compute the autocovariance matrices for the Yule-Walker equations
+            autocov_mats = estimate_covariance_mats(ts, self._p)
+            # Fit the model using the Yule-Walker equations
+            coeffs = gnar_yw(autocov_mats, self._ns_mats, self._p, self._s, self._model_type)
+            self.coeffs = coeffs.T
+            # Estimate the noise covariance matrix
+            self.sigma_2 = estimate_res_mat(data, coeffs, self._p, self._s, self._n)
+        else:
+            raise ValueError("Method must be one of 'OLS' or 'YW'.")
+
 
     def predict(self, ts=None, h=1):
         """
@@ -260,19 +275,12 @@ class GNAR:
             var (VAR): The VAR form of the GNAR model.
         """
         # Get coefficients
-        coefficients = self.coeffs
-        var_coeffs = []
-        seen = 0
-        # Construct a matrix for each lag of the model
-        for i in range(self._p):
-            # Alpha coefficients along the diagonal
-            coeffs = np.diag(coefficients[i])
-            s = self._s[i]
-            # Beta coefficients in the off-diagonal elements, reweighted according to the corresponding weights in the neighbour set matrices
-            for j in range(s):
-                coeffs += self._ns_mats[j] * coefficients[self._p + seen + j]
-            seen += s
-            var_coeffs.append(coeffs)
+        coefficients = param_reorder(self.coeffs, self._p, self._s)
+        W = var_coeff_maps(self._ns_mats, self._p, self._s, self._d)
+        var_coeffs = np.zeros([self._p * self._d, self._d])
+        for i in range(self._d):
+            # Compute the coefficients for each node
+            var_coeffs[:, i] = W[i] @ coefficients[:, i]
         # Create a parameter DataFrame for the VAR model with the same column names as the GNAR model
         var_coeffs =  pd.DataFrame(np.vstack(var_coeffs), columns=self._names)
         # Return the VAR model
