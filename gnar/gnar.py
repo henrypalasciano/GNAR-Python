@@ -119,7 +119,6 @@ class GNAR:
         else:
             raise ValueError("Method must be one of 'OLS' or 'YW'.")
 
-
     def predict(self, ts=None, h=1):
         """
         Forecast future values of an input time series using the GNAR model.
@@ -234,6 +233,15 @@ class GNAR:
         var = self.to_var()
         # Compute the autocovariance matrices
         return var.compute_autocov_mats(max_lag=max_lag)
+    
+    def compute_autocorr_mats(self, max_lag=None):
+        """
+        Compute the autocorrelation matrices for the GNAR model up to a maximum lag. Output shape: (max_lag + 1, d, d) from lag 0 to lag max_lag
+        """
+        # Convert to a VAR
+        var = self.to_var()
+        # Compute the autocorrelation matrices
+        return var.compute_autocorr_mats(max_lag=max_lag)
 
     def bic(self):
         """
@@ -276,7 +284,7 @@ class GNAR:
         """
         # Get coefficients
         coefficients = param_reorder(self.coeffs, self._p, self._s)
-        W = var_coeff_maps(self._ns_mats, self._p, self._s, self._d)
+        W = weight_mats(self._ns_mats, self._p, self._s, self._d)
         var_coeffs = np.zeros([self._p * self._d, self._d])
         for i in range(self._d):
             # Compute the coefficients for each node

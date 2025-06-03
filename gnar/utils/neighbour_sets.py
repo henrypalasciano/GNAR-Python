@@ -47,7 +47,7 @@ def compute_neighbour_sums(ts, ns_mats, r):
     data[:, :, 1:] = np.transpose(ts @ ns_mats, (1, 2, 0))
     return data
 
-def var_coeff_maps(ns_mats, p, s, d):
+def weight_mats(ns_mats, p, s, d):
     """
     Construct the matrices for mapping the gnar coefficients to var form. Also useful for the Yule-Walker equations.
 

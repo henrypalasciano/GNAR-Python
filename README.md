@@ -112,10 +112,11 @@ and Python implementation:
 ```bibtex
 @software{GNAR-Python,
   author = {Palasciano, H. A.},
-  title = {{GNAR Python}: A Python implementation of Generalised Network Autoregressive Processes},
+  title = {{GNAR Python}: A Python Implementation of Generalised Network Autoregressive Processes},
   year = {2024},
   url = {https://github.com/henrypalasciano/GNAR-Python},
-  version = {1.0}
+  version = {1.0},
+  doi = {10.5281/zenodo.15538154}
 }
 ```
 
