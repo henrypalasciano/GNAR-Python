@@ -1,6 +1,6 @@
 import numpy as np
 
-def shift_X(X, sim, ns, p, s):
+def shift_X(X: np.ndarray, sim: np.ndarray, ns: np.ndarray, p: int, s: np.ndarray) -> np.ndarray:
     """
     Shift the design matrix with the new simulated values and neighbour sums
 
@@ -25,7 +25,7 @@ def shift_X(X, sim, ns, p, s):
         X[:, p + np.sum(s[:i]).astype(int) : p + np.sum(s[:i+1]).astype(int)] = ns[:, i * r : i * r + s[i]]
     return X
 
-def generate_noise(sigma_2, n, d):
+def generate_noise(sigma_2: float | int | np.ndarray, n: int, d: int) -> np.ndarray:
     """
     Generate noise for the GNAR model. The noise is assumed to be Gaussian with mean 0 and variance (or covariance) sigma_2.
 
@@ -33,7 +33,7 @@ def generate_noise(sigma_2, n, d):
         sigma_2: float, int, np.array. The variance or covariance matrix.
         n: int. Number of observations.
         d: int. Number of nodes.
-    
+
     Returns:
         np.array. Noise matrix. Shape (n, d)
     """

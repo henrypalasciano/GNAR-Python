@@ -1,6 +1,6 @@
 import numpy as np
 
-def format_X(data, p, s):
+def format_X(data: np.ndarray, p: int, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Format the data to compute forecasts using the GNAR model
 
@@ -28,7 +28,7 @@ def format_X(data, p, s):
     # Return the design matrix and the lagged values
     return X, lagged_vals
 
-def update_X(X, preds, lagged_vals, p, s):
+def update_X(X: np.ndarray, preds: np.ndarray, lagged_vals: np.ndarray, p: int, s: np.ndarray) -> np.ndarray:
     """
     Update the design matrix with new lagged values and neighbour sums
 

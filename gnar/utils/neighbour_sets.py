@@ -1,13 +1,13 @@
 import numpy as np
 
-def neighbour_set_mats(A, r):
+def neighbour_set_mats(A: np.ndarray, r: int) -> np.ndarray:
     """
     Compute a tensor containing the powers of the adjacency matrix A up to stage s.
 
     Params:
         A: np.array. Adjacency matrix. Shape (n, n)
         r: int. Maximum stage of neighbour dependence
-    
+
     Returns:
         ns_mats: np.array. Tensor of powers of the adjacency matrix. Shape (r, n, n)
     """
@@ -29,7 +29,7 @@ def neighbour_set_mats(A, r):
         ns_mats[i] = np.divide(A_i, A_sum, out=ns_mats[i], where=(A_sum!=0))
     return ns_mats
 
-def compute_neighbour_sums(ts, ns_mats, r):
+def compute_neighbour_sums(ts: np.ndarray, ns_mats: np.ndarray, r: int) -> np.ndarray:
     """
     Compute the neighbour sums for each stage of neighbour dependence.
 
@@ -47,7 +47,7 @@ def compute_neighbour_sums(ts, ns_mats, r):
     data[:, :, 1:] = np.transpose(ts @ ns_mats, (1, 2, 0))
     return data
 
-def weight_mats(ns_mats, p, s, d):
+def weight_mats(ns_mats: np.ndarray, p: int, s: np.ndarray, d: int) -> np.ndarray:
     """
     Construct the matrices for mapping the gnar coefficients to var form. Also useful for the Yule-Walker equations.
 
@@ -55,7 +55,7 @@ def weight_mats(ns_mats, p, s, d):
         ns_mats: np.array. Tensor of powers of the adjacency matrix. Shape (r, n, n)
         p: int. Number of lags
         s: np.array. Maximum stage of neighbour dependence for each lag. Shape (p,)
-    
+
     Returns:
         np.array. Mapping matrices. Shape (d, p * d, p + sum(s))
     """

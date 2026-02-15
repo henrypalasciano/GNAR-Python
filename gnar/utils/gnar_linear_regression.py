@@ -3,7 +3,7 @@ from scipy.linalg import lstsq
 from scipy.sparse.linalg import lsqr
 from scipy.sparse import csr_matrix
 
-def format_X_y(data, p, s):
+def format_X_y(data: np.ndarray, p: int, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Format the data to fit the GNAR model
 
@@ -32,7 +32,7 @@ def format_X_y(data, p, s):
     return X, y
 
 
-def gnar_lr(data, p, s, model_type):
+def gnar_lr(data: np.ndarray, p: int, s: np.ndarray, model_type: str) -> tuple[np.ndarray, np.ndarray]:
     """
     Fit a GNAR model using multiple linear regression
 
@@ -50,7 +50,7 @@ def gnar_lr(data, p, s, model_type):
     X,y = format_X_y(data, p, s)
     # Shape of the data
     n, d, k = np.shape(X)
-    
+
     if model_type == "global":
         # Stack the design matrix and target
         design_matrix = np.transpose(X, (1, 0, 2)).reshape(d * n, k)
@@ -62,12 +62,12 @@ def gnar_lr(data, p, s, model_type):
         coeffs[valid_cols] = lstsq(design_matrix[:, valid_cols], target)[0].flatten()
         # Remap the coefficients to the original shape
         coeffs_mat = np.tile(coeffs, (d, 1))
-    
+
     elif model_type == "standard":
         # Initialise the design matrix and target vector
         design_matrix = np.zeros([n * d, p * d])
         target = y.T.reshape(-1,1)
-        # Fill the design matrix with the alpha coefficient features
+        # Fill the design matrix with the alpha coefficient features
         for i in range(d):
             design_matrix[i * n : (i + 1) * n, i :: d] = X[:, i, :p]
         # Add the beta coeffient features to the design matrix
@@ -81,7 +81,7 @@ def gnar_lr(data, p, s, model_type):
         # Remap the coefficients to the original shape
         coeffs_mat = coeffs[0 : d * p].reshape(p, d).T
         coeffs_mat = np.hstack([coeffs_mat, np.repeat(coeffs[d * p :].reshape(1, -1), d, axis=0)])
-    
+
     elif model_type == "local":
         # Compute the coefficients for each node separately
         coeffs_mat = np.zeros((d, k))
@@ -89,7 +89,7 @@ def gnar_lr(data, p, s, model_type):
             X_i = X[:, i, :]
             valid_cols = np.any(X_i != 0, axis=0)
             coeffs_mat[i, valid_cols > 0] = lstsq(X_i[:, valid_cols > 0], y[:, i])[0].flatten()
-    
+
     # Compute the covariance matrix of the residuals
     res = np.sum(X * coeffs_mat, axis=2) - y
     sigma_2 = res.T @ res / (n - p)

@@ -6,10 +6,10 @@ from scipy.linalg import solve
 
 from gnar.utils.gnar_linear_regression import format_X_y
 
-def estimate_covariance_mats(ts, p):
+def estimate_covariance_mats(ts: np.ndarray, p: int) -> np.ndarray:
     """
     Estimate the covariance matrices for tau = 0, 1, ..., p.
-    
+
     Params:
         ts: np.ndarray of shape (n, d). Time series data.
         p: int. Number of lags.
@@ -23,7 +23,7 @@ def estimate_covariance_mats(ts, p):
         cov_mats[tau] = ts[tau:].T @ ts[:n - tau] / (n - tau - 1)
     return cov_mats
 
-def network_covariance_mats(autocov_mats, ns_mats, p):
+def network_covariance_mats(autocov_mats: np.ndarray, ns_mats: np.ndarray, p: int) -> np.ndarray:
     """
     Given the autocovariance matrices for tau = 0, 1, ..., p and the neighbour sum matrices, construct the network autocovariance matrices for each node, lag and stage of neighbour dependence.
 
@@ -31,14 +31,14 @@ def network_covariance_mats(autocov_mats, ns_mats, p):
         autocov_mats: np.ndarray of shape (p + 1, d, d). Covariance matrices for tau = 0, 1, ..., p.
         ns_mats: np.ndarray of shape (max(s), d, d). Neighbour sum matrices for r = 1, ..., max(s).
         p: int. Number of lags.
-    
+
     Returns:
         np.ndarray of shape (d, 2 * p + 1, r + 1, r + 1). Network autocovariance matrices for each node, lag and stage of neighbour dependence.
     """
     r, d, _ = ns_mats.shape
     # Add autocovariance matrices for negative lags, in order Gamma_0, Gamma_1, ..., Gamma_p, Gamma_{-p}, ..., Gamma_{-1}. autocov_mats[j] gives the correct matrix for j = -p, ..., p.
     autocov_mats = np.vstack([autocov_mats, autocov_mats[1:][::-1].transpose(0, 2, 1)])
-    # Add identity matrix to ns_mats (stage 0 weights) and transpose so that each row of each matrix gives the weights for a given node 
+    # Add identity matrix to ns_mats (stage 0 weights) and transpose so that each row of each matrix gives the weights for a given node
     ns_weights = np.vstack([np.eye(d).reshape(1, d, d), ns_mats.transpose(0, 2, 1)])
 
     # Construct the GNAR autocovariance matrices for each node, lag and stage of neighbour dependence
@@ -47,10 +47,10 @@ def network_covariance_mats(autocov_mats, ns_mats, p):
         gnar_autocovs[i] = ns_weights[:, i] @ autocov_mats @ ns_weights[:, i].T
     return gnar_autocovs
 
-def structure_covariance_mats(autocov_mats, ns_mats, p, s):
+def structure_covariance_mats(autocov_mats: np.ndarray, ns_mats: np.ndarray, p: int, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Given the network autocovariance matrices for tau = 0, 1, ..., p, construct the GNAR autocovariance matrices for the Yule-Walker equations.
-    
+
     Params:
         autocov_mats: np.ndarray of shape (p + 1, d, d). Covariance matrices for tau = 0, 1, ..., p.
         ns_mats: np.ndarray of shape (max(s), d, d). Neighbour sum matrices for r = 1, ..., max(s).
@@ -77,10 +77,10 @@ def structure_covariance_mats(autocov_mats, ns_mats, p, s):
 
     return gamma_G, Gamma_G
 
-def gnar_yw(autocov_mats, ns_mats, p, s, model_type):
+def gnar_yw(autocov_mats: np.ndarray, ns_mats: np.ndarray, p: int, s: np.ndarray, model_type: str) -> np.ndarray:
     """
     Fit a GNAR model using the Yule-Walker equations.
-    
+
     Params:
         autocov_mats: np.ndarray of shape (p + 1, d, d). Covariance matrices for tau = 0, 1, ..., p.
         ns_mats: np.ndarray of shape (max(s), d, d). Neighbour sum matrices for r = 1, ..., max(s).
@@ -132,13 +132,13 @@ def gnar_yw(autocov_mats, ns_mats, p, s, model_type):
             coeffs_mat[i, valid_cols] = solve(X[valid_cols, :][:, valid_cols], y[valid_cols])
     else:
         raise ValueError("Invalid model type. Expected one of 'global', 'standard' or 'local'.")
-    
+
     # Reorder the coefficients matrix to match the order stored in the GNAR class
     coeffs_mat = rearrange(coeffs_mat, p, s)
     return coeffs_mat
 
 
-def format_standard(Gamma_G, gamma_G, d, p, s):
+def format_standard(Gamma_G: np.ndarray, gamma_G: np.ndarray, d: int, p: int, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Formats each section of the Gamma_G matrix and gamma_G vector for estimation in the standard setting.
     Essentially we are combining d Yule-Walker equations with y_i of shape (d + sum(s)) and X_i of shape (d + sum(s), d + sum(s)) into a single equation with y of shape (d + sum(s)) and X of shape (d + sum(s), d + sum(s)).
@@ -180,7 +180,7 @@ def format_standard(Gamma_G, gamma_G, d, p, s):
     return X, y
 
 
-def rearrange(coeffs_mat, p, s):
+def rearrange(coeffs_mat: np.ndarray, p: int, s: np.ndarray) -> np.ndarray:
     """
     Rearrange the coefficients matrix to match the order stored in the GNAR class.
     """
@@ -194,7 +194,7 @@ def rearrange(coeffs_mat, p, s):
     return coeffs_ordered
 
 
-def estimate_res_mat(data, coeffs_mat, p, s, n):
+def estimate_res_mat(data: np.ndarray, coeffs_mat: np.ndarray, p: int, s: np.ndarray, n: int) -> np.ndarray:
     """
     Estimate the matrix of residuals for the GNAR model fit via the Yule-Walker equations.
     """

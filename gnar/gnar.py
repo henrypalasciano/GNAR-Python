@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -33,10 +35,22 @@ class GNAR:
         bic: Compute the Bayesian Information Criterion (BIC).
         aic: Compute the Akaike Information Criterion (AIC).
         to_var: Convert the GNAR model to VAR model format.
-        to_networkx: Convert the adjacency matrix to a NetworkX graph. 
+        to_networkx: Convert the adjacency matrix to a NetworkX graph.
         draw: Draw the graph using NetworkX.
     """
-    def __init__(self, A, p, s, model_type="standard", ts=None, demean=True, method="OLS", coeffs=None, mean=0, sigma_2=1):
+    def __init__(
+        self,
+        A: np.ndarray,
+        p: int,
+        s: np.ndarray,
+        model_type: str = "standard",
+        ts: np.ndarray | pd.DataFrame | None = None,
+        demean: bool = True,
+        method: str = "OLS",
+        coeffs: np.ndarray | pd.DataFrame | None = None,
+        mean: float | int | np.ndarray | pd.DataFrame = 0,
+        sigma_2: float | int | np.ndarray | pd.DataFrame = 1,
+    ) -> None:
         # Initial checks
         gnar_checks(A, p, s, model_type)
 
@@ -56,13 +70,18 @@ class GNAR:
         elif coeffs is not None:
             # If the parameters are provided, set up using these
             self._d = A.shape[0]
-            self._n = None 
+            self._n = None
             self._ts = None
-            self._parameter_setup(coeffs, mean, sigma_2)    
+            self._parameter_setup(coeffs, mean, sigma_2)
         else:
             raise ValueError("Either the input time series data or the model parameters are required.")
 
-    def _parameter_setup(self, coeffs, mean, sigma_2):
+    def _parameter_setup(
+        self,
+        coeffs: np.ndarray | pd.DataFrame,
+        mean: float | int | np.ndarray | pd.DataFrame,
+        sigma_2: float | int | np.ndarray | pd.DataFrame,
+    ) -> None:
         # Store the coefficients
         if isinstance(coeffs, np.ndarray):
             self.coeffs = coeffs
@@ -78,7 +97,7 @@ class GNAR:
         self.mu = set_mean(mean, self._d)
         self.sigma_2 = set_cov(sigma_2)
 
-    def fit(self, ts, demean=True, method="OLS"):
+    def fit(self, ts: np.ndarray | pd.DataFrame, demean: bool = True, method: str = "OLS") -> None:
         """
         Fit the GNAR model to the time series data.
 
@@ -119,7 +138,7 @@ class GNAR:
         else:
             raise ValueError("Method must be one of 'OLS' or 'YW'.")
 
-    def predict(self, ts=None, h=1):
+    def predict(self, ts: np.ndarray | pd.DataFrame | None = None, h: int = 1) -> np.ndarray | pd.DataFrame:
         """
         Forecast future values of an input time series using the GNAR model.
 
@@ -128,14 +147,14 @@ class GNAR:
             h (int): The number of steps ahead to forecast.
 
         Returns:
-            preds (np.ndarray or pd.DataFrame): The predicted values. If the shape of the input is (p, d), the shape of the output is always (h, d). If 
-                                                the shape is (n, d) for some n > p, the output is (n - p + 1, d, h) if a numpy array, or (n - p + 1, d * h) 
+            preds (np.ndarray or pd.DataFrame): The predicted values. If the shape of the input is (p, d), the shape of the output is always (h, d). If
+                                                the shape is (n, d) for some n > p, the output is (n - p + 1, d, h) if a numpy array, or (n - p + 1, d * h)
                                                 if a pandas DataFrame. In the latter case we are assuming that one computes forecasts from each available
                                                 time point, which may be useful when evaluating the performance of a model out-of-sample for example.
         """
         if ts is None:
-            if self._n is None:
-                raise ValueError("The model was not fit.")
+            if self._ts is None:
+                raise ValueError("No time series provided and the model was not fit to data. Pass a time series to predict().")
             # Last p observations used in fitting
             ts = self._ts[-self._p:]
         # Data shapes
@@ -152,7 +171,7 @@ class GNAR:
             names = ts.columns
             index = ts.index[self._p - 1:]
             ts = ts.to_numpy()
-        
+
         # Remove the mean from the data and get the coefficients
         ts = ts - self.mu
         coeffs = self.coeffs.T
@@ -172,7 +191,7 @@ class GNAR:
             X = update_X(X, preds[:, :, i-1], lagged_vals, self._p, self._s)
             # Compute the (i + 1) - step ahead predictions
             preds[:, :, i] = np.sum(X * coeffs, axis=2)
-            
+
         preds = preds + self.mu.reshape(1, d, 1)
         if n == self._p:
             if is_df:
@@ -183,7 +202,7 @@ class GNAR:
             return pd.DataFrame(preds.reshape(n - self._p + 1, d * h), index=index, columns=columns, dtype=float)
         return preds
 
-    def simulate(self, n, sigma_2=None, burn_in=50):
+    def simulate(self, n: int, sigma_2: float | int | np.ndarray | None = None, burn_in: int = 50) -> np.ndarray:
         """
         Simulate data from the GNAR model.
 
@@ -191,7 +210,7 @@ class GNAR:
             n (int): The number of time steps to simulate.
             sigma_2 (int, float or np.ndarray): The variance of the noise. If an int or a float, the same variance is used for all time series.
             burn_in (int): The number of burn-in steps to discard.
-        
+
         Returns:
             ts_sim (np.ndarray): The simulated time series data. Shape (n, d)
         """
@@ -204,7 +223,7 @@ class GNAR:
         if sigma_2 is None:
             sigma_2 = self.sigma_2
         e_t = generate_noise(sigma_2, burn_in + n, d)
-        
+
         # Initialise the array to store the simulated time series data
         ts_sim = np.zeros([burn_in + n, d])
         ns = np.zeros([d, self._p * r])
@@ -225,7 +244,7 @@ class GNAR:
         # Return the simulated time series data, adding the mean to the data
         return ts_sim[burn_in:] + self.mu
 
-    def compute_autocov_mats(self, max_lag=None):
+    def compute_autocov_mats(self, max_lag: int | None = None) -> np.ndarray:
         """
         Compute the autocovariance matrices for the GNAR model up to a maximum lag. Output shape: (max_lag + 1, d, d) from lag 0 to lag max_lag
         """
@@ -233,8 +252,8 @@ class GNAR:
         var = self.to_var()
         # Compute the autocovariance matrices
         return var.compute_autocov_mats(max_lag=max_lag)
-    
-    def compute_autocorr_mats(self, max_lag=None):
+
+    def compute_autocorr_mats(self, max_lag: int | None = None) -> np.ndarray:
         """
         Compute the autocorrelation matrices for the GNAR model up to a maximum lag. Output shape: (max_lag + 1, d, d) from lag 0 to lag max_lag
         """
@@ -243,7 +262,7 @@ class GNAR:
         # Compute the autocorrelation matrices
         return var.compute_autocorr_mats(max_lag=max_lag)
 
-    def bic(self):
+    def bic(self) -> float:
         """
         Compute the Bayesian Information Criterion (BIC) for the GNAR model.
         """
@@ -255,7 +274,7 @@ class GNAR:
         # Compute the BIC
         return det + k * np.log(self._n - self._p) / (self._n - self._p)
 
-    def aic(self):
+    def aic(self) -> float:
         """
         Compute the Akaike Information Criterion (AIC) for the GNAR model.
         """
@@ -266,19 +285,19 @@ class GNAR:
         k = self._num_params()
         # Compute the AIC
         return det + 2 * k / (self._n - self._p)
-    
-    def _num_params(self):
+
+    def _num_params(self) -> int:
         # Compute the number of parameters in the model
         if self._model_type == "global":
             return self._p + np.sum(self._s)
         elif self._model_type == "standard":
             return self._d * self._p + np.sum(self._s)
         return self._d * (self._p + np.sum(self._s))
-    
-    def to_var(self):
+
+    def to_var(self) -> VAR:
         """
         Convert the GNAR model to VAR model format.
-        
+
         Returns:
             var (VAR): The VAR form of the GNAR model.
         """
@@ -294,21 +313,25 @@ class GNAR:
         # Return the VAR model
         return VAR(p=self._p, coeffs=var_coeffs, mean=self.mu, sigma_2=self.sigma_2)
 
-    def to_networkx(self):
+    def to_networkx(self) -> nx.Graph:
         """
         Convert the adjacency matrix to a NetworkX graph, which is stored in the nx_graph attribute.
         """
         nx_graph = nx.from_numpy_array(self._A)
         return nx.relabel_nodes(nx_graph, dict(enumerate(self._names)))
 
-    def draw(self):
+    def draw(self) -> None:
         """
         Draw the graph using NetworkX.
         """
         nx_graph = self.to_networkx()
         nx.draw(nx_graph, with_labels=True)
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        fitted = self._ts is not None
+        return f"GNAR(model_type=\"{self._model_type}\", p={self._p}, s={self._s.tolist()}, d={self._d}, fitted={fitted})"
+
+    def __str__(self) -> str:
         """
         Return a string representation of the GNAR model.
         """
@@ -318,7 +341,7 @@ class GNAR:
         index = ["mean"] + [f"a_{i}" for i in range(1, self._p + 1)]
         for i in range(1, self._p + 1):
             index += [f"b_{i},{j}" for j in range(1, self._s[i - 1] + 1)]
-        parameters = pd.DataFrame(np.vstack([self.mu, self.coeffs]), columns=self._names, index=index)   
+        parameters = pd.DataFrame(np.vstack([self.mu, self.coeffs]), columns=self._names, index=index)
         parameter_info = f"Parameters:\n{parameters}\n"
         cov = pd.DataFrame(cov_mat(self.sigma_2, self._d), index=self._names, columns=self._names)
         noise = f"Noise covariance matrix:\n{cov}\n"

@@ -23,23 +23,37 @@ class VAR:
         bic: Compute the Bayesian Information Criterion (BIC).
         aic: Compute the Akaike Information Criterion (AIC).
     """
-    def __init__(self, p, ts=None, demean=True, coeffs=None, mean=0, sigma_2=1):
+    def __init__(
+        self,
+        p: int,
+        ts: np.ndarray | pd.DataFrame | None = None,
+        demean: bool = True,
+        coeffs: np.ndarray | pd.DataFrame | None = None,
+        mean: float | int | np.ndarray | pd.DataFrame = 0,
+        sigma_2: float | int | np.ndarray | pd.DataFrame = 1,
+    ) -> None:
         # Initial checks
         if p < 1:
             raise ValueError("The number of lags p must be at least 1.")
 
         self._p = p
+        self._n = None
         if ts is not None:
             # If a time series is provided, fit the model to the data, removing the mean if necessary
             self.fit(ts.copy(), demean)
         elif coeffs is not None:
             # If the parameters are provided, set up using these
             self._ts = None
-            self._parameter_setup(coeffs, mean, sigma_2)        
+            self._parameter_setup(coeffs, mean, sigma_2)
         else:
             raise ValueError("Either the input time series data or the model parameters are required.")
 
-    def _parameter_setup(self, coeffs, mean, sigma_2):
+    def _parameter_setup(
+        self,
+        coeffs: np.ndarray | pd.DataFrame,
+        mean: float | int | np.ndarray | pd.DataFrame,
+        sigma_2: float | int | np.ndarray | pd.DataFrame,
+    ) -> None:
         # Store the coefficients
         if isinstance(coeffs, np.ndarray):
             self.coeffs = coeffs
@@ -59,8 +73,8 @@ class VAR:
         # Check whether the process is stationary
         if not self.is_stationary():
             warnings.warn("The VAR model is non-stationary based on the provided parameters!", UserWarning)
-    
-    def fit(self, ts, demean):
+
+    def fit(self, ts: np.ndarray | pd.DataFrame, demean: bool = True) -> None:
         """
         Fit the VAR model to the time series data.
 
@@ -91,12 +105,12 @@ class VAR:
         for j in range(d):
             # Fit the model using least squares regression
             self.coeffs[:, j] = np.linalg.lstsq(X, y[:, j], rcond=None)[0]
-        
+
         # Compute the noise covariance matrix
         res = X @ self.coeffs - y
         self.sigma_2 = res.T @ res / (n - self._p)
-        
-    def predict(self, ts=None, h=1):
+
+    def predict(self, ts: np.ndarray | pd.DataFrame | None = None, h: int = 1) -> np.ndarray | pd.DataFrame:
         """
         Forecast future values of an input time series using the VAR model.
 
@@ -105,14 +119,14 @@ class VAR:
             h (int): The number of steps ahead to forecast.
 
         Returns:
-            preds (np.ndarray or pd.DataFrame): The predicted values. If the shape of the input is (p, d), the shape of the output is always (h, d). If 
-                                                the shape is (n, d) for some n > p, the output is (n - p + 1, d, h) if a numpy array, or (n - p + 1, d * h) 
+            preds (np.ndarray or pd.DataFrame): The predicted values. If the shape of the input is (p, d), the shape of the output is always (h, d). If
+                                                the shape is (n, d) for some n > p, the output is (n - p + 1, d, h) if a numpy array, or (n - p + 1, d * h)
                                                 if a pandas DataFrame. In the latter case we are assuming that one computes forecasts from each available
                                                 time point, which may be useful when evaluating the performance of a model out-of-sample for example.
         """
         if ts is None:
-            if self._n is None:
-                raise ValueError("The model was not fit.")
+            if self._ts is None:
+                raise ValueError("No time series provided and the model was not fit to data. Pass a time series to predict().")
             # Last p observations used in fitting
             ts = self._ts[-self._p:]
         n, d = np.shape(ts)
@@ -127,7 +141,7 @@ class VAR:
             names = ts.columns
             index = ts.index[self._p - 1:]
             ts = ts.to_numpy()
-        
+
         # Remove the mean from the data and get the coefficients
         ts = ts - self.mu
 
@@ -145,7 +159,7 @@ class VAR:
                 X = preds[:, :, i]
             else:
                 X = np.hstack([preds[:, :, i], X[:, :-d]])
-        
+
         preds = preds + self.mu.reshape(1, d, 1)
         if n == self._p:
             if is_df:
@@ -156,15 +170,15 @@ class VAR:
             return pd.DataFrame(preds.reshape(n - self._p + 1, d * h), index=index, columns=columns, dtype=float)
         return preds
 
-    def simulate(self, n, sigma_2=None, burn_in=50):
+    def simulate(self, n: int, sigma_2: float | int | np.ndarray | None = None, burn_in: int = 50) -> np.ndarray:
         """
         Simulate data from the VAR model.
-        
+
         Parameters:
             n (int): The number of time steps to simulate.
             sigma_2 (int, float or np.ndarray): The variance of the noise. If an int or a float, the same variance is used for all time series.
             burn_in (int): The number of burn-in steps to discard.
-        
+
         Returns:
             ts_sim (np.ndarray): The simulated time series data. Shape (n, d)
         """
@@ -189,8 +203,8 @@ class VAR:
                 X = np.hstack([sim, X[:-self._d]])
         # Return the simulated time series data, adding the mean to the data
         return ts_sim[burn_in:] + self.mu
-    
-    def is_stationary(self):
+
+    def is_stationary(self) -> bool:
         """
         Check if the VAR model is stationary by computing the eigenvalues of the companion form.
         """
@@ -199,10 +213,10 @@ class VAR:
         eigs = np.linalg.eigvals(phi)
         # Check if all eigenvalues are inside the unit circle
         return np.all(np.abs(eigs) < 1)
-    
-    def companion_form(self):
+
+    def companion_form(self) -> tuple[np.ndarray, np.ndarray]:
         """
-        Return the companion form of the VAR model. 
+        Return the companion form of the VAR model.
         """
         # If the model is of order 1, then it is already in companion form
         if self._p == 1:
@@ -217,7 +231,7 @@ class VAR:
         sigma_2[:self._d, :self._d] = cov_mat(self.sigma_2, self._d)
         return phi, sigma_2
 
-    def compute_autocov_mats(self, max_lag=None):
+    def compute_autocov_mats(self, max_lag: int | None = None) -> np.ndarray:
         """
         Compute the autocovariance matrices for the VAR model up to a maximum lag. Output shape: (max_lag + 1, d, d) from lag 0 to lag max_lag
         """
@@ -237,7 +251,7 @@ class VAR:
             autocovs = np.vstack([autocovs, np.sum(coeffs @ autocovs[-self._p:], axis=0).reshape(1, self._d, self._d)])
         return autocovs
 
-    def compute_autocorr_mats(self, max_lag=None):
+    def compute_autocorr_mats(self, max_lag: int | None = None) -> np.ndarray:
         """
         Compute the autocorrelation matrices for the VAR model up to a maximum lag. Output shape: (max_lag + 1, d, d) from lag 0 to lag max_lag
         """
@@ -245,10 +259,10 @@ class VAR:
         autocovs = self.compute_autocov_mats(max_lag)
         # Compute diagonal matrix containing the inverses of the standard deviations of each series
         D = np.diag(np.diag(autocovs[0]) ** -0.5)
-        # Compute the autocorrelation matrices 
+        # Compute the autocorrelation matrices
         return D @ autocovs @ D
 
-    def bic(self):
+    def bic(self) -> float:
         """
         Compute the Bayesian Information Criterion (BIC) for the VAR model.
         """
@@ -260,7 +274,7 @@ class VAR:
         # Compute the BIC
         return det + k * np.log(self._n - self._p) / (self._n - self._p)
 
-    def aic(self):
+    def aic(self) -> float:
         """
         Compute the Akaike Information Criterion (AIC) for the GNAR model.
         """
@@ -272,7 +286,11 @@ class VAR:
         # Compute the AIC
         return det + 2 * k / (self._n - self._p)
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        fitted = self._ts is not None
+        return f"VAR(p={self._p}, d={self._d}, fitted={fitted})"
+
+    def __str__(self) -> str:
         """
         Return a string representation of the VAR model.
         """

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gnar"
+version = "1.0.0"
+description = "Generalised Network Autoregressive Processes"
+license = "MIT"
+authors = [
+    { name = "Henry Antonio Palasciano", email = "h.palasciano17@imperial.ac.uk" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.18.2",
+    "networkx>=3.0",
+    "matplotlib>=1.4.3",
+    "seaborn>=0.9.0",
+    "pandas>=1.0.3",
+    "scipy>=1.6.0",
+    "IPython>=7.19.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "mypy"]
+
+[tool.setuptools.packages.find]
+include = ["gnar*"]
