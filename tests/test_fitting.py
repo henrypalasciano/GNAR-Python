@@ -58,12 +58,6 @@ A_3NODE = np.array([[0, 1, 0],
                      [0, 1, 0]], dtype=float)
 
 
-def _ols_reference(ts, A, p, s, model_type, net_type="unweighted"):
-    """Compute OLS coefficients using the GNAR model to get a reference."""
-    G = GNAR(A, p=p, s=s, ts=ts, model_type=model_type, net_type=net_type, method="OLS", demean=True)
-    return G.coeffs, G.mu, G.sigma_2
-
-
 class TestOLSFitting:
 
     def test_standard_p1s1_2node(self):
