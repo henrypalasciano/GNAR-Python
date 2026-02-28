@@ -10,8 +10,11 @@ GNAR processes are a class of autoregressive models that describe the behavior o
 - In standard (or local - $\alpha$) models, only the $\beta$ (neighbour set) coefficients are shared whereas the $\alpha$ ( autoregressive coefficients) are node specific.  
 - In local - $\alpha\beta$ models, all parameters are node specific.  
 
-**Note:** The current implementation **only supports unweighted networks**.  
-**Support for weighted graphs will be added in a future update.**
+The package supports **unweighted**, **weighted** and **distance** networks. The `net_type` parameter controls how neighbour weights are computed:
+
+- `"unweighted"` (default): Binary adjacency matrix. Each stage-$r$ neighbour receives equal weight $1/|N_r(j)|$.
+- `"weighted"`: Edge weights represent connection strength (larger = stronger). Within each stage, weights are proportional to the sum of products of edge weights along all shortest paths.
+- `"distance"`: Edge weights represent distances (larger = farther). Distances are converted to connection weights via $1/d_{ij}$, then treated as in the weighted case.
 
 ---
 
@@ -49,7 +52,7 @@ A = np.array([[0, 1, 0],
               [1, 0, 1],
               [0, 1, 0]])
 
-# Fit a standard GNAR(2,[1,1]) process to the time series data
+# Fit a standard GNAR(2,[1,1]) process to the time series data on an unweighted network
 G = GNAR(A, p=2, s=np.array([1, 1]), ts=ts, demean=True, model_type="standard")
 print(G)
 
@@ -69,6 +72,21 @@ predictions = G.predict(h=5)
 
 # Visualise the graph
 G.draw()
+
+# --- Weighted and distance networks ---
+
+# Weighted network: edge weights represent connection strength
+A_weighted = np.array([[0, 2, 0],
+                       [2, 0, 3],
+                       [0, 3, 0]], dtype=float)
+ts = np.random.normal(0, 1, (100, 3))
+G_weighted = GNAR(A_weighted, p=2, s=np.array([1, 1]), ts=ts, net_type="weighted")
+
+# Distance network: edge weights represent distances (closer nodes receive more weight)
+A_distance = np.array([[0, 0.5, 0],
+                       [0.5, 0, 1.2],
+                       [0, 1.2, 0]], dtype=float)
+G_distance = GNAR(A_distance, p=2, s=np.array([1, 1]), ts=ts, net_type="distance")
 ```
 
 ---
