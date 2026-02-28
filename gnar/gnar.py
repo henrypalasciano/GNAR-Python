@@ -21,6 +21,7 @@ class GNAR:
         p (int): The number of lags.
         s (np.ndarray): An array containing the maximum stage of neighbour dependence for each lag.
         model_type (str): The type of GNAR model. Either "global", "standard" or "local". Defaults to "standard".
+        net_type (str): The type of network. One of "unweighted", "weighted" or "distance". Defaults to "unweighted".
         ts (np.ndarray or pd.DataFrame): The input time series data. Shape (n, d) where n is the number of observations and d is the number of nodes.
         demean (bool): Whether to remove the mean from the data. Only required if ts is provided. Defaults to True.
         method (str): The method used to fit the model. Either "OLS" or "YW". Defaults to "OLS".
@@ -44,6 +45,7 @@ class GNAR:
         p: int,
         s: np.ndarray,
         model_type: str = "standard",
+        net_type: str = "unweighted",
         ts: np.ndarray | pd.DataFrame | None = None,
         demean: bool = True,
         method: str = "OLS",
@@ -52,17 +54,15 @@ class GNAR:
         sigma_2: float | int | np.ndarray | pd.DataFrame = 1,
     ) -> None:
         # Initial checks
-        gnar_checks(A, p, s, model_type)
+        gnar_checks(A, p, s, model_type, net_type)
 
         self._A = A
         self._p = p
         self._s = s
         self._model_type = model_type
+        self._net_type = net_type
         # Compute the neighbour set matrices up to the maximum stage of neighbour dependence
-        if np.all((A == 0) | (A == 1)):
-            self._ns_mats = neighbour_set_mats(A, np.max(s))
-        else:
-            raise ValueError("Weighted matrices not supported yet.")
+        self._ns_mats = neighbour_set_mats(A, np.max(s), net_type)
 
         if ts is not None:
             # If a time series is provided, fit the model to the data, removing the mean if necessary
@@ -329,7 +329,7 @@ class GNAR:
 
     def __repr__(self) -> str:
         fitted = self._ts is not None
-        return f"GNAR(model_type=\"{self._model_type}\", p={self._p}, s={self._s.tolist()}, d={self._d}, fitted={fitted})"
+        return f"GNAR(model_type=\"{self._model_type}\", net_type=\"{self._net_type}\", p={self._p}, s={self._s.tolist()}, d={self._d}, fitted={fitted})"
 
     def __str__(self) -> str:
         """

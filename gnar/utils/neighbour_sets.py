@@ -1,32 +1,68 @@
 import numpy as np
 
-def neighbour_set_mats(A: np.ndarray, r: int) -> np.ndarray:
+def neighbour_set_mats(A: np.ndarray, r: int, net_type: str = "unweighted") -> np.ndarray:
     """
-    Compute a tensor containing the powers of the adjacency matrix A up to stage s.
+    Compute a tensor containing the neighbour weight matrices up to stage r.
+
+    For each stage, the weight matrix identifies nodes at that hop distance and
+    assigns normalised weights. The normalisation depends on the network type:
+      - "unweighted": uniform weights (1 / number of stage-r neighbours)
+      - "weighted": weights proportional to connection strengths (products along paths)
+      - "distance": weights inversely proportional to distances (products of 1/dist along paths)
 
     Params:
-        A: np.array. Adjacency matrix. Shape (n, n)
-        r: int. Maximum stage of neighbour dependence
+        A: np.array. Adjacency matrix. Shape (n, n). For unweighted networks, entries
+            must be 0 or 1. For weighted/distance networks, entries are non-negative.
+        r: int. Maximum stage of neighbour dependence.
+        net_type: str. One of "unweighted", "weighted", or "distance".
 
     Returns:
-        ns_mats: np.array. Tensor of powers of the adjacency matrix. Shape (r, n, n)
+        ns_mats: np.array. Tensor of neighbour weight matrices. Shape (r, n, n)
     """
     d = A.shape[0]
-    # Create the tensor containing the adjacency matrix for each stage of neighbour dependence up to stage r
     ns_mats = np.zeros([r, d, d])
-    # Compute the stage 1 adjacency matrix
-    A_sum = np.sum(A, axis=0)
-    ns_mats[0] = np.divide(A, A_sum, out=ns_mats[0], where=(A_sum!=0))
-    A_i = A.copy()
-    # Initialise see matrix to keep track of nodes that have been visited to avoid cycles
-    seen = np.eye(d)
-    # Compute the adjacency matrix for each stage of neighbour dependence up to stage r
-    for i in range(1, r):
-        seen = seen + A_i
-        A_i = np.clip(A_i @ A, 0, 1)
-        A_i[seen > 0] = 0
-        A_sum = np.sum(A_i, axis=0)
-        ns_mats[i] = np.divide(A_i, A_sum, out=ns_mats[i], where=(A_sum!=0))
+
+    if net_type == "unweighted":
+        # Stage 1
+        A_sum = np.sum(A, axis=0)
+        ns_mats[0] = np.divide(A, A_sum, out=ns_mats[0], where=(A_sum!=0))
+        A_i = A.copy()
+        seen = np.eye(d)
+        for i in range(1, r):
+            seen = seen + A_i
+            A_i = np.clip(A_i @ A, 0, 1)
+            A_i[seen > 0] = 0
+            A_sum = np.sum(A_i, axis=0)
+            ns_mats[i] = np.divide(A_i, A_sum, out=ns_mats[i], where=(A_sum!=0))
+    else:
+        # Weighted or distance network
+        A_binary = (A > 0).astype(float)
+        if net_type == "distance":
+            # Convert distances to connection weights: closer = stronger
+            W = np.zeros_like(A)
+            mask = A > 0
+            W[mask] = 1.0 / A[mask]
+        else:
+            W = A.copy()
+
+        # Stage 1: direct neighbours with weights from W
+        W_sum = np.sum(W, axis=0)
+        ns_mats[0] = np.divide(W, W_sum, out=ns_mats[0], where=(W_sum != 0))
+
+        # Binary tracking for stage determination, weighted tracking for weight accumulation
+        B_i = A_binary.copy()
+        W_i = W.copy()
+        seen = np.eye(d)
+
+        for i in range(1, r):
+            seen = seen + B_i
+            B_i = np.clip(B_i @ A_binary, 0, 1)
+            W_i = W_i @ W
+            B_i[seen > 0] = 0
+            W_i[seen > 0] = 0
+            W_sum = np.sum(W_i, axis=0)
+            ns_mats[i] = np.divide(W_i, W_sum, out=ns_mats[i], where=(W_sum != 0))
+
     return ns_mats
 
 def compute_neighbour_sums(ts: np.ndarray, ns_mats: np.ndarray, r: int) -> np.ndarray:

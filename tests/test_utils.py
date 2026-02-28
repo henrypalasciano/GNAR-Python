@@ -26,6 +26,53 @@ class TestNeighbourSets:
         # Stage 2 should have nonzero entries (2-hop neighbours exist in cycle)
         assert np.any(ns[1] > 0)
 
+    def test_ns_mats_weighted_stage1(self, adjacency_3):
+        """Weighted stage 1: weights proportional to edge weights, normalised."""
+        A = np.array([[0, 2, 0],
+                      [2, 0, 3],
+                      [0, 3, 0]], dtype=float)
+        ns = neighbour_set_mats(A, r=1, net_type="weighted")
+        # Column 1 (node 2) has neighbours 1 and 3 with weights 2 and 3
+        assert ns[0, 0, 1] == pytest.approx(2 / 5)
+        assert ns[0, 2, 1] == pytest.approx(3 / 5)
+        # Columns should sum to 1
+        col_sums = np.sum(ns[0], axis=0)
+        for s in col_sums:
+            assert s == pytest.approx(0.0) or s == pytest.approx(1.0)
+
+    def test_ns_mats_weighted_stage2(self):
+        """Weighted stage 2: weights are sums of products along shortest paths."""
+        # Diamond graph: 0-1, 0-2, 1-3, 2-3
+        A = np.array([[0, 2, 3, 0],
+                      [2, 0, 0, 5],
+                      [3, 0, 0, 7],
+                      [0, 5, 7, 0]], dtype=float)
+        ns = neighbour_set_mats(A, r=2, net_type="weighted")
+        # Node 0 and node 3 are at hop distance 2
+        # Weight for (3, 0): paths 3->1->0 (5*2=10) and 3->2->0 (7*3=21), total=31
+        # Node 3's stage-2 neighbour is only node 0, so normalised weight = 1
+        assert ns[1, 0, 3] == pytest.approx(1.0)
+        # Weight for (0, 3): paths 0->1->3 (2*5=10) and 0->2->3 (3*7=21), total=31
+        assert ns[1, 3, 0] == pytest.approx(1.0)
+
+    def test_ns_mats_distance(self, adjacency_3):
+        """Distance network: weights inversely proportional to distance."""
+        A = np.array([[0, 4, 0],
+                      [4, 0, 2],
+                      [0, 2, 0]], dtype=float)
+        ns = neighbour_set_mats(A, r=1, net_type="distance")
+        # Column 1 (node 2): neighbours are 1 and 3 with distances 4 and 2
+        # Connection weights: 1/4 and 1/2
+        # Normalised: (1/4)/(1/4+1/2) = 1/3, (1/2)/(1/4+1/2) = 2/3
+        assert ns[0, 0, 1] == pytest.approx(1 / 3)
+        assert ns[0, 2, 1] == pytest.approx(2 / 3)
+
+    def test_ns_mats_weighted_matches_unweighted(self, adjacency_3):
+        """Weighted with binary adjacency should match unweighted."""
+        ns_unweighted = neighbour_set_mats(adjacency_3, r=2, net_type="unweighted")
+        ns_weighted = neighbour_set_mats(adjacency_3, r=2, net_type="weighted")
+        assert np.allclose(ns_unweighted, ns_weighted)
+
     def test_compute_neighbour_sums_shape(self, adjacency_3):
         ns = neighbour_set_mats(adjacency_3, r=2)
         ts = np.random.normal(0, 1, (50, 3))
@@ -61,6 +108,23 @@ class TestGNARChecks:
     def test_bad_model_type(self, adjacency_3, s_array):
         with pytest.raises(ValueError, match="Invalid model_type"):
             gnar_checks(adjacency_3, 2, s_array, "bad")
+
+    def test_bad_net_type(self, adjacency_3, s_array):
+        with pytest.raises(ValueError, match="Invalid net_type"):
+            gnar_checks(adjacency_3, 2, s_array, "standard", "bad")
+
+    def test_unweighted_rejects_weights(self, s_array):
+        A = np.array([[0, 2, 0],
+                      [2, 0, 3],
+                      [0, 3, 0]], dtype=float)
+        with pytest.raises(ValueError, match="binary"):
+            gnar_checks(A, 2, s_array, "standard", "unweighted")
+
+    def test_weighted_accepts_weights(self, s_array):
+        A = np.array([[0, 2, 0],
+                      [2, 0, 3],
+                      [0, 3, 0]], dtype=float)
+        assert gnar_checks(A, 2, s_array, "standard", "weighted") is None
 
 
 class TestCheckGNARCoeffs:

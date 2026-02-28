@@ -1,11 +1,16 @@
 import numpy as np
 import pandas as pd
 
-def gnar_checks(A: np.ndarray, p: int, s: np.ndarray, model_type: str) -> None:
+def gnar_checks(A: np.ndarray, p: int, s: np.ndarray, model_type: str, net_type: str = "unweighted") -> None:
     if not isinstance(A, np.ndarray) or A.shape[0] != A.shape[1]:
         raise ValueError("Adjacency matrix A must be a square NumPy array.")
     if np.any(A < 0):
         raise ValueError("Adjacency matrix A must have non-negative weights.")
+    valid_net_types = {"unweighted", "weighted", "distance"}
+    if net_type not in valid_net_types:
+        raise ValueError(f"Invalid net_type. Expected one of {valid_net_types}, got '{net_type}'.")
+    if net_type == "unweighted" and not np.all((A == 0) | (A == 1)):
+        raise ValueError("Adjacency matrix A must be binary (0 or 1) for unweighted networks.")
     if p < 1:
         raise ValueError("The number of lags p must be at least 1.")
     if not isinstance(s, np.ndarray) or len(s) != p:
