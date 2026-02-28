@@ -39,11 +39,13 @@ def neighbour_set_mats(A: np.ndarray, r: int, net_type: str = "unweighted") -> n
         A_binary = (A > 0).astype(float)
         if net_type == "distance":
             # Convert distances to connection weights: closer = stronger
-            W = np.zeros_like(A)
+            W = np.zeros_like(A, dtype=float)
             mask = A > 0
             W[mask] = 1.0 / A[mask]
-        else:
+        elif net_type == "weighted":
             W = A.copy()
+        else:
+            raise ValueError("net_type must be one of 'unweighted', 'weighted', or 'distance'")
 
         # Stage 1: direct neighbours with weights from W
         W_sum = np.sum(W, axis=0)
